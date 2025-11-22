@@ -319,11 +319,13 @@ def main():
         with col:
             if i == 1:
                 # Ο 1ος οίκος είναι πάντα ίδιος με τον Ωροσκόπο
-                # Τον εμφανίζουμε σαν selectbox, αλλά δεν επιτρέπουμε αλλαγή
-                if asc_sign_gr not in SIGNS_WITH_EMPTY:
-                    current = "---"
-                else:
+                # Τον εμφανίζουμε σαν selectbox (όπως τους άλλους), αλλά δεν επιτρέπουμε αλλαγή.
+                if asc_sign_gr != "---":
+                    # Φορτώνουμε στο session state το ίδιο ζώδιο με τον Ωροσκόπο
+                    st.session_state[f"house_{i}_{st.session_state.reset_counter}"] = asc_sign_gr
                     current = asc_sign_gr
+                else:
+                    current = "---"
                 sign = st.selectbox(
                     "Οίκος 1 (ίδιος με Ωροσκόπο)",
                     SIGNS_WITH_EMPTY,
