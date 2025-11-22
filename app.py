@@ -180,6 +180,52 @@ def generate_section5_aspects_with_openai(payload: dict) -> str:
     return response.choices[0].message.content
 
 
+def generate_full_report_with_openai(payload: dict) -> str:
+    """
+    Παράγει ΠΛΗΡΗ αναφορά: Ενότητες 0-3, 4, 5 σε ένα κείμενο.
+    Καλεί το OpenAI 3 φορές και ενώνει τα αποτελέσματα.
+    """
+    client = get_openai_client()
+    if client is None:
+        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον."
+    
+    report_parts = []
+    
+    # Μέρος 1: Βασική αναφορά (0-3)
+    try:
+        basic = generate_basic_report_with_openai(payload)
+        report_parts.append("=" * 80)
+        report_parts.append("ΜΕΡΟΣ Α: ΒΑΣΙΚΗ ΑΝΑΦΟΡΑ (Ενότητες 0-3)")
+        report_parts.append("=" * 80)
+        report_parts.append(basic)
+        report_parts.append("\n\n")
+    except Exception as e:
+        report_parts.append(f"⚠️ Σφάλμα στη βασική αναφορά: {e}\n\n")
+    
+    # Μέρος 2: Ταλέντα (4)
+    try:
+        talents = generate_section4_report_with_openai(payload)
+        report_parts.append("=" * 80)
+        report_parts.append("ΜΕΡΟΣ Β: ΤΑΛΕΝΤΑ & ΕΣΩΤΕΡΙΚΗ ΠΟΡΕΙΑ (Ενότητα 4)")
+        report_parts.append("=" * 80)
+        report_parts.append(talents)
+        report_parts.append("\n\n")
+    except Exception as e:
+        report_parts.append(f"⚠️ Σφάλμα στην ενότητα 4: {e}\n\n")
+    
+    # Μέρος 3: Όψεις (5)
+    try:
+        aspects = generate_section5_aspects_with_openai(payload)
+        report_parts.append("=" * 80)
+        report_parts.append("ΜΕΡΟΣ Γ: ΑΝΑΛΥΤΙΚΕΣ ΟΨΕΙΣ (Ενότητα 5)")
+        report_parts.append("=" * 80)
+        report_parts.append(aspects)
+    except Exception as e:
+        report_parts.append(f"⚠️ Σφάλμα στην ενότητα 5: {e}\n\n")
+    
+    return "\n".join(report_parts)
+
+
 def create_pdf(payload: dict, report_text: str) -> BytesIO:
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm)
@@ -324,15 +370,17 @@ def main():
             aspects_selected_ui[(en1, en2)] = choice
 
     st.markdown("---")
-    col_b1, col_b2, col_b3 = st.columns(3)
+    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
     with col_b1:
         basic_button = st.button("📝 Βασική αναφορά (Ενότητες 0–3)")
     with col_b2:
         talents_button = st.button("🌟 Ενότητα 4 – Ταλέντα & Θεραπευτική Πορεία")
     with col_b3:
         aspects_button = st.button("🔮 Ενότητα 5 – Όψεις (αναλυτικά)")
+    with col_b4:
+        full_button = st.button("📕 Πλήρης Αναφορά (Όλες οι Ενότητες)")
 
-    if basic_button or talents_button or aspects_button:
+    if basic_button or talents_button or aspects_button or full_button:
         if sun_sign_gr == "---" or asc_sign_gr == "---" or moon_sign_gr == "---":
             st.error("⚠️ Παρακαλώ συμπλήρωσε Ζώδιο Ηλίου, Ωροσκόπο και Ζώδιο Σελήνης!")
             return
@@ -424,6 +472,22 @@ def main():
             st.download_button("📄 Λήψη Ενότητας 5 σε PDF", data=pdf_buffer,
                 file_name=f"section5_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
                 mime="application/pdf")
+
+        if full_button:
+            st.subheader("🤖 Πλήρης Αναφορά με OpenAI (Όλες οι Ενότητες)")
+            with st.spinner("Καλώ το μοντέλο 3 φορές για ολοκληρωμένη αναφορά... Μπορεί να πάρει 1-2 λεπτά."):
+                try:
+                    report_text = generate_full_report_with_openai(payload)
+                except Exception as e:
+                    report_text = f"Σφάλμα: {e}"
+            st.markdown("### 📜 Πλήρης Αναφορά Γενέθλιου Χάρτη")
+            st.write(report_text)
+            st.markdown("---")
+            pdf_buffer = create_pdf(payload, report_text)
+            st.download_button("📄 Λήψη Πλήρους Αναφοράς σε PDF", data=pdf_buffer,
+                file_name=f"full_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf")
+            st.success("✅ Πλήρης αναφορά ολοκληρώθηκε! Μπορείς να την κατεβάσεις ως PDF.")
 
     st.markdown("---")
     if st.button("🔄 Επανεκκίνηση (μηδενισμός όλων των δεδομένων)"):
