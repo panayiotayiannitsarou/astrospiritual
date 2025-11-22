@@ -10,6 +10,31 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+# Επιλογή Unicode γραμματοσειράς για σωστή εμφάνιση ελληνικών στο PDF.
+PDF_FONT_NAME = "Helvetica"  # fallback
+_font_candidates = [
+    "DejaVuSans.ttf",
+    os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf"),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "C:\\Windows\\Fonts\\DejaVuSans.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf",
+]
+
+for _fpath in _font_candidates:
+    try:
+        if _fpath and os.path.exists(_fpath):
+            pdfmetrics.registerFont(TTFont("GreekPDF", _fpath))
+            PDF_FONT_NAME = "GreekPDF"
+            break
+    except Exception:
+        # Αν αποτύχει κάποιο αρχείο, συνεχίζουμε με το επόμενο
+        pass
+
+
 # ---------- ΡΥΘΜΙΣΕΙΣ / ΣΤΑΘΕΡΕΣ ----------
 
 # Ζώδια: Ελληνικά -> Αγγλικά
@@ -160,25 +185,30 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=16,
-        textColor='#4A4A4A',
-        spaceAfter=12,
-        alignment=TA_CENTER
+        fontName=PDF_FONT_NAME,
+        fontSize=18,
+        textColor='#2C3E50',
+        spaceAfter=18,
+        alignment=TA_CENTER,
     )
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading2'],
-        fontSize=12,
+        fontName=PDF_FONT_NAME,
+        fontSize=13,
         textColor='#2C3E50',
-        spaceAfter=10,
-        spaceBefore=10
+        spaceAfter=8,
+        spaceBefore=14,
+        alignment=TA_LEFT,
     )
     body_style = ParagraphStyle(
         'CustomBody',
         parent=styles['BodyText'],
-        fontSize=10,
-        leading=14,
-        alignment=TA_LEFT
+        fontName=PDF_FONT_NAME,
+        fontSize=11,
+        leading=16,
+        alignment=TA_LEFT,
+    )
     )
     
     # Τίτλος
@@ -212,7 +242,7 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     json_str = json.dumps(payload, ensure_ascii=False, indent=2)
     for line in json_str.split('\n')[:50]:  # Πρώτες 50 γραμμές
         safe_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        story.append(Paragraph(f"<font name=Courier size=8>{safe_line}</font>", body_style))
+        story.append(Paragraph(f"<font name='{PDF_FONT_NAME}' size='8'>{safe_line}</font>", body_style))
     
     doc.build(story)
     buffer.seek(0)
@@ -263,12 +293,10 @@ def main():
         )
 
     # Auto-sync Ωροσκόπος -> Οίκος 1
-    # Κάθε φορά που αλλάζει ο Ωροσκόπος, ενημερώνεται αυτόματα ο Οίκος 1
-    # ώστε να έχει το ίδιο ζώδιο. Δεν χρειάζεται να το γράφει η/ο χρήστης χειροκίνητα.
     if asc_sign_gr != "---" and asc_sign_gr != st.session_state.prev_asc:
         st.session_state.prev_asc = asc_sign_gr
-        # Στο session_state αποθηκεύουμε την τιμή (π.χ. "Κριός"), όχι το index
-        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_sign_gr
+        asc_index = SIGNS_WITH_EMPTY.index(asc_sign_gr)
+        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_index
         st.rerun()
 
     # ----- ΟΙΚΟΙ -----
