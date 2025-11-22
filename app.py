@@ -75,16 +75,16 @@ PLANETS = [
 # Όψεις: label για UI -> κωδικός για JSON
 ASPECT_OPTIONS = [
     ("Καμία", None),
-    ("🔴 ☌ Σύνοδος (0°)", "conjunction"),
-    ("🔴 ☍ Αντίθεση (180°)", "opposition"),
-    ("🔵 △ Τρίγωνο (120°)", "trine"),
-    ("🔴 □ Τετράγωνο (90°)", "square"),
-    ("🔵 ⚹ Εξάγωνο (60°)", "sextile"),
+    ("☌ Σύνοδος (0°)", "conjunction"),
+    ("☍ Αντίθεση (180°)", "opposition"),
+    ("△ Τρίγωνο (120°)", "trine"),
+    ("□ Τετράγωνο (90°)", "square"),
+    ("✶ Εξάγωνο (60°)", "sextile"),
 ]
 
 
 def get_openai_client():
-    """Φτιάχνει OpenAI client αν υπάρχει API key."""
+    """Φτιάχνει OpenAI client αν υπάρχει API key."""  # noqa: D401
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return None
@@ -92,10 +92,7 @@ def get_openai_client():
 
 
 def generate_report_with_openai(payload: dict) -> str:
-    """
-    Καλεί το OpenAI Chat Completions API και ζητά να γραφτεί η αναφορά
-    με βάση τις 3 ενότητες που έχουμε σχεδιάσει.
-    """
+    """Καλεί το OpenAI Chat Completions API και ζητά να γραφτεί η αναφορά."""
     client = get_openai_client()
     if client is None:
         return (
@@ -165,27 +162,29 @@ def main():
             "Ζώδιο Ήλιου",
             SIGNS_WITH_EMPTY,
             index=0,
-            key=f"sun_sign_{st.session_state.reset_counter}"
+            key=f"sun_sign_{st.session_state.reset_counter}",
         )
     with col2:
         asc_sign_gr = st.selectbox(
             "Ωροσκόπος",
             SIGNS_WITH_EMPTY,
             index=0,
-            key=f"asc_sign_{st.session_state.reset_counter}"
+            key=f"asc_sign_{st.session_state.reset_counter}",
         )
     with col3:
         moon_sign_gr = st.selectbox(
             "Ζώδιο Σελήνης",
             SIGNS_WITH_EMPTY,
             index=0,
-            key=f"moon_sign_{st.session_state.reset_counter}"
+            key=f"moon_sign_{st.session_state.reset_counter}",
         )
 
     # ----- ΕΝΟΤΗΤΑ 1: ΟΙΚΟΙ -----
     st.header("1. Ενότητα 1 – Ακμές οίκων (ζώδιο σε κάθε οίκο)")
 
-    st.markdown("Διάβασε από τον χάρτη σου σε ποιο ζώδιο ξεκινά κάθε οίκος (1–12) και διάλεξέ το.")
+    st.markdown(
+        "Διάβασε από τον χάρτη σου σε ποιο ζώδιο ξεκινά κάθε οίκος (1–12) και διάλεξέ το."
+    )
 
     houses_signs_gr = {}
     cols = st.columns(4)
@@ -286,23 +285,27 @@ def main():
             ruler_gr = PLANET_EN_TO_GR.get(ruler_en, ruler_en) if ruler_en else None
             ruler_in_house = planet_house_map.get(ruler_en)
 
-            houses.append({
-                "house": house_num,
-                "sign_gr": sign_gr,
-                "sign": sign_en,
-                "ruler": ruler_en,
-                "ruler_gr": ruler_gr,
-                "ruler_in_house": ruler_in_house,
-            })
+            houses.append(
+                {
+                    "house": house_num,
+                    "sign_gr": sign_gr,
+                    "sign": sign_en,
+                    "ruler": ruler_en,
+                    "ruler_gr": ruler_gr,
+                    "ruler_in_house": ruler_in_house,
+                }
+            )
 
         planets_in_houses = []
         for en_name, house_num in planet_house_map.items():
             gr_name = next(gr for gr, en in PLANETS if en == en_name)
-            planets_in_houses.append({
-                "planet": en_name,
-                "planet_gr": gr_name,
-                "house": house_num,
-            })
+            planets_in_houses.append(
+                {
+                    "planet": en_name,
+                    "planet_gr": gr_name,
+                    "house": house_num,
+                }
+            )
 
         aspects = []
         for (p1, p2), label in aspects_selected_ui.items():
@@ -311,14 +314,16 @@ def main():
                 continue
             gr1 = next(gr for gr, en in PLANETS if en == p1)
             gr2 = next(gr for gr, en in PLANETS if en == p2)
-            aspects.append({
-                "p1": p1,
-                "p1_gr": gr1,
-                "p2": p2,
-                "p2_gr": gr2,
-                "aspect": code,
-                "aspect_label_gr": label,
-            })
+            aspects.append(
+                {
+                    "p1": p1,
+                    "p1_gr": gr1,
+                    "p2": p2,
+                    "p2_gr": gr2,
+                    "aspect": code,
+                    "aspect_label_gr": label,
+                }
+            )
 
         payload = {
             "basic_info": basic_info,
@@ -343,7 +348,6 @@ def main():
     # ----- ΚΟΥΜΠΙ ΕΠΑΝΕΚΚΙΝΗΣΗΣ -----
     st.markdown("---")
     if st.button("🔄 Επανεκκίνηση (μηδενισμός όλων των δεδομένων)"):
-        # Αύξηση counter για reset όλων των widgets
         st.session_state.reset_counter += 1
         st.rerun()
 
