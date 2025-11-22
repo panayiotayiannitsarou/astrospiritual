@@ -22,6 +22,7 @@ SIGNS_GR_TO_EN = {
 }
 
 SIGNS_GR_LIST = list(SIGNS_GR_TO_EN.keys())
+SIGNS_WITH_EMPTY = ["---"] + SIGNS_GR_LIST  # Για dropdowns με κενή επιλογή
 
 # Κυβερνήτες ζωδίων (Αγγλικά)
 SIGN_RULERS = {
@@ -151,16 +152,35 @@ def main():
         "και να φτιάχνεις δομημένα δεδομένα για μια αναλυτική έκθεση με ChatGPT."
     )
 
+    # Session reset counter για force refresh των widgets
+    if "reset_counter" not in st.session_state:
+        st.session_state.reset_counter = 0
+
     # ----- ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ ΧΑΡΤΗ -----
     st.header("0. Βασικά στοιχεία χάρτη")
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        sun_sign_gr = st.selectbox("Ζώδιο Ήλιου", SIGNS_GR_LIST, index=SIGNS_GR_LIST.index("Υδροχόος"))
+        sun_sign_gr = st.selectbox(
+            "Ζώδιο Ήλιου",
+            SIGNS_WITH_EMPTY,
+            index=0,
+            key=f"sun_sign_{st.session_state.reset_counter}"
+        )
     with col2:
-        asc_sign_gr = st.selectbox("Ωροσκόπος", SIGNS_GR_LIST, index=SIGNS_GR_LIST.index("Τοξότης"))
+        asc_sign_gr = st.selectbox(
+            "Ωροσκόπος",
+            SIGNS_WITH_EMPTY,
+            index=0,
+            key=f"asc_sign_{st.session_state.reset_counter}"
+        )
     with col3:
-        moon_sign_gr = st.selectbox("Ζώδιο Σελήνης", SIGNS_GR_LIST, index=SIGNS_GR_LIST.index("Παρθένος"))
+        moon_sign_gr = st.selectbox(
+            "Ζώδιο Σελήνης",
+            SIGNS_WITH_EMPTY,
+            index=0,
+            key=f"moon_sign_{st.session_state.reset_counter}"
+        )
 
     # ----- ΕΝΟΤΗΤΑ 1: ΟΙΚΟΙ -----
     st.header("1. Ενότητα 1 – Ακμές οίκων (ζώδιο σε κάθε οίκο)")
@@ -174,8 +194,8 @@ def main():
         with col:
             sign = st.selectbox(
                 f"Οίκος {i}",
-                SIGNS_GR_LIST,
-                key=f"house_{i}",
+                SIGNS_WITH_EMPTY,
+                key=f"house_{i}_{st.session_state.reset_counter}",
             )
         houses_signs_gr[i] = sign
 
@@ -198,7 +218,7 @@ def main():
             selected_planets_gr = st.multiselect(
                 f"Πλανήτες στον Οίκο {i}",
                 planet_choices,
-                key=f"house_planets_{i}",
+                key=f"house_planets_{i}_{st.session_state.reset_counter}",
             )
         house_planets_map[i] = selected_planets_gr
 
@@ -229,7 +249,7 @@ def main():
         st.markdown(f"#### Όψεις {gr1}")
         for j in range(i + 1, len(PLANETS)):
             gr2, en2 = PLANETS[j]
-            key = f"aspect_{en1}_{en2}"
+            key = f"aspect_{en1}_{en2}_{st.session_state.reset_counter}"
             choice = st.selectbox(
                 f"{gr1} – {gr2}",
                 aspect_labels,
@@ -242,6 +262,11 @@ def main():
     generate_button = st.button("📝 Δημιουργία αναφοράς")
 
     if generate_button:
+        # Validation: check αν έχουν συμπληρωθεί τα βασικά
+        if sun_sign_gr == "---" or asc_sign_gr == "---" or moon_sign_gr == "---":
+            st.error("⚠️ Παρακαλώ συμπλήρωσε Ζώδιο Ήλιου, Ωροσκόπο και Ζώδιο Σελήνης!")
+            return
+
         basic_info = {
             "sun_sign_gr": sun_sign_gr,
             "sun_sign": SIGNS_GR_TO_EN[sun_sign_gr],
@@ -254,6 +279,8 @@ def main():
         # Φτιάχνουμε houses με ruler & ruler_in_house
         houses = []
         for house_num, sign_gr in houses_signs_gr.items():
+            if sign_gr == "---":  # Skip κενές επιλογές
+                continue
             sign_en = SIGNS_GR_TO_EN[sign_gr]
             ruler_en = SIGN_RULERS.get(sign_en)
             ruler_gr = PLANET_EN_TO_GR.get(ruler_en, ruler_en) if ruler_en else None
@@ -316,9 +343,8 @@ def main():
     # ----- ΚΟΥΜΠΙ ΕΠΑΝΕΚΚΙΝΗΣΗΣ -----
     st.markdown("---")
     if st.button("🔄 Επανεκκίνηση (μηδενισμός όλων των δεδομένων)"):
-        # Καθαρισμός session state
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
+        # Αύξηση counter για reset όλων των widgets
+        st.session_state.reset_counter += 1
         st.rerun()
 
 
