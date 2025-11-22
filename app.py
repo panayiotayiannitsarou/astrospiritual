@@ -1,4 +1,3 @@
-
 import os
 import json
 import streamlit as st
@@ -23,6 +22,38 @@ SIGNS_GR_TO_EN = {
 }
 
 SIGNS_GR_LIST = list(SIGNS_GR_TO_EN.keys())
+
+# Κυβερνήτες ζωδίων (Αγγλικά)
+SIGN_RULERS = {
+    "Aries": "Mars",
+    "Taurus": "Venus",
+    "Gemini": "Mercury",
+    "Cancer": "Moon",
+    "Leo": "Sun",
+    "Virgo": "Mercury",
+    "Libra": "Venus",
+    "Scorpio": "Pluto",
+    "Sagittarius": "Jupiter",
+    "Capricorn": "Saturn",
+    "Aquarius": "Uranus",
+    "Pisces": "Neptune",
+}
+
+# Αντίστροφος πίνακας: Αγγλικά -> Ελληνικά ονόματα πλανητών
+PLANET_EN_TO_GR = {
+    "Sun": "Ήλιος",
+    "Moon": "Σελήνη",
+    "Mercury": "Ερμής",
+    "Venus": "Αφροδίτη",
+    "Mars": "Άρης",
+    "Jupiter": "Δίας",
+    "Saturn": "Κρόνος",
+    "Uranus": "Ουρανός",
+    "Neptune": "Ποσειδώνας",
+    "Pluto": "Πλούτωνας",
+    "Chiron": "Χείρωνας",
+    "North Node": "Βόρειος Δεσμός",
+}
 
 # Πλανήτες: (Ελληνικά, Αγγλικά)
 PLANETS = [
@@ -60,7 +91,10 @@ def get_openai_client():
 
 
 def generate_report_with_openai(payload: dict) -> str:
-    """Καλεί το OpenAI API και παράγει το κείμενο της αναφοράς."""
+    """
+    Καλεί το OpenAI Chat Completions API και ζητά να γραφτεί η αναφορά
+    με βάση τις 3 ενότητες που έχουμε σχεδιάσει.
+    """
     client = get_openai_client()
     if client is None:
         return (
@@ -80,7 +114,9 @@ def generate_report_with_openai(payload: dict) -> str:
         "με θέμα οίκου + χρώμα ζωδίου ακμής.\n"
         "2. ΕΝΟΤΗΤΑ 2 – Πλανήτες & κυβερνήτες σε οίκους: για κάθε οίκο, αν έχει πλανήτες "
         "γράψε ανάλυση. Αν δεν έχει, εξήγησε τον οίκο μέσω του ζωδίου της ακμής και του "
-        "κυβερνήτη του ζωδίου (πλανήτης και οίκος στον οποίο βρίσκεται).\n"
+        "κυβερνήτη του ζωδίου (πλανήτης και οίκος στον οποίο βρίσκεται). "
+        "Το JSON περιέχει πλέον τα πεδία 'ruler' (ποιος πλανήτης κυβερνά το ζώδιο) και "
+        "'ruler_in_house' (σε ποιον οίκο βρίσκεται ο κυβερνήτης, ή null αν δεν υπάρχει).\n"
         "3. ΕΝΟΤΗΤΑ 3 – Όψεις: για κάθε όψη στο JSON, γράψε μια παράγραφο που εξηγεί "
         "τη δυναμική ανάμεσα στους δύο πλανήτες (όψεις που ΔΕΝ υπάρχουν στο JSON, αγνόησέ τες).\n\n"
         "Η γλώσσα να είναι ζεστή αλλά όχι υπερβολικά 'ποιητική'. Να είναι σαφής, "
@@ -146,7 +182,7 @@ def main():
             )
         houses_signs_gr[i] = sign
 
-    # ----- ΕΝΟΤΗΤΑ 2: ΠΛΑΝΗΤΕΣ ΣΕ ΟΙΚΟΥΣ (ΜΕ 'ΚΑΝΕΝΑΣ') -----
+    # ----- ΕΝΟΤΗΤΑ 2: ΠΛΑΝΗΤΕΣ ΣΕ ΟΙΚΟΥΣ -----
     st.header("2. Ενότητα 2 – Πλανήτες σε οίκους")
 
     st.markdown(
@@ -154,11 +190,9 @@ def main():
         "Αν ο οίκος δεν έχει κανέναν πλανήτη, τικάρισε μόνο το 'Κανένας'."
     )
 
-    # Λίστα με ελληνικά ονόματα πλανητών + 'Κανένας'
     planet_names_gr = [gr for gr, en in PLANETS]
     planet_choices = ["Κανένας"] + planet_names_gr
 
-    # Για κάθε οίκο, multiselect με πλανήτες + 'Κανένας'
     house_planets_map = {}
     cols_h2 = st.columns(4)
     for i in range(1, 13):
@@ -174,18 +208,12 @@ def main():
     # Από το ανά οίκο -> φτιάχνουμε ανά πλανήτη
     planet_house_map = {}
     for house_num, planets_gr_list in house_planets_map.items():
-        # Αν έχει επιλεγεί 'Κανένας', αγνοούμε τυχόν άλλες επιλογές και
-        # θεωρούμε τον οίκο άδειο (δεν μπαίνει κανένας πλανήτης)
         if "Κανένας" in planets_gr_list or len(planets_gr_list) == 0:
             continue
-
         for gr_name in planets_gr_list:
             if gr_name == "Κανένας":
                 continue
-            # Βρες το αγγλικό όνομα του πλανήτη
             en_name = next(en for (gr, en) in PLANETS if gr == gr_name)
-            # Αν (για λάθος) ο ίδιος πλανήτης δηλωθεί σε δύο οίκους,
-            # η τελευταία επιλογή θα υπερισχύσει.
             planet_house_map[en_name] = house_num
 
     # ----- ΕΝΟΤΗΤΑ 3: ΟΨΕΙΣ -----
@@ -199,7 +227,6 @@ def main():
     aspect_labels = [opt[0] for opt in ASPECT_OPTIONS]
     label_to_code = {opt[0]: opt[1] for opt in ASPECT_OPTIONS}
 
-    # Widgets για όψεις: για κάθε μοναδικό ζευγάρι (p1, p2) με i < j
     aspects_selected_ui = {}
     for i, (gr1, en1) in enumerate(PLANETS):
         st.markdown(f"#### Όψεις {gr1}")
@@ -218,7 +245,6 @@ def main():
     generate_button = st.button("📝 Δημιουργία αναφοράς")
 
     if generate_button:
-        # Φτιάχνουμε το payload (JSON) για ChatGPT
         basic_info = {
             "birth_date": birth_date,
             "birth_time": birth_time,
@@ -231,45 +257,47 @@ def main():
             "moon_sign": SIGNS_GR_TO_EN[moon_sign_gr],
         }
 
+        # Φτιάχνουμε houses με ruler & ruler_in_house
         houses = []
         for house_num, sign_gr in houses_signs_gr.items():
-            houses.append(
-                {
-                    "house": house_num,
-                    "sign_gr": sign_gr,
-                    "sign": SIGNS_GR_TO_EN[sign_gr],
-                }
-            )
+            sign_en = SIGNS_GR_TO_EN[sign_gr]
+            ruler_en = SIGN_RULERS.get(sign_en)
+            ruler_gr = PLANET_EN_TO_GR.get(ruler_en, ruler_en) if ruler_en else None
+            ruler_in_house = planet_house_map.get(ruler_en)
+
+            houses.append({
+                "house": house_num,
+                "sign_gr": sign_gr,
+                "sign": sign_en,
+                "ruler": ruler_en,
+                "ruler_gr": ruler_gr,
+                "ruler_in_house": ruler_in_house,
+            })
 
         planets_in_houses = []
         for en_name, house_num in planet_house_map.items():
-            # Βρες το ελληνικό όνομα από τη λίστα PLANETS
             gr_name = next(gr for gr, en in PLANETS if en == en_name)
-            planets_in_houses.append(
-                {
-                    "planet": en_name,
-                    "planet_gr": gr_name,
-                    "house": house_num,
-                }
-            )
+            planets_in_houses.append({
+                "planet": en_name,
+                "planet_gr": gr_name,
+                "house": house_num,
+            })
 
         aspects = []
         for (p1, p2), label in aspects_selected_ui.items():
             code = label_to_code.get(label)
             if code is None:
-                continue  # "Καμία"
+                continue
             gr1 = next(gr for gr, en in PLANETS if en == p1)
             gr2 = next(gr for gr, en in PLANETS if en == p2)
-            aspects.append(
-                {
-                    "p1": p1,
-                    "p1_gr": gr1,
-                    "p2": p2,
-                    "p2_gr": gr2,
-                    "aspect": code,
-                    "aspect_label_gr": label,
-                }
-            )
+            aspects.append({
+                "p1": p1,
+                "p1_gr": gr1,
+                "p2": p2,
+                "p2_gr": gr2,
+                "aspect": code,
+                "aspect_label_gr": label,
+            })
 
         payload = {
             "basic_info": basic_info,
