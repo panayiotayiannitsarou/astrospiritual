@@ -10,30 +10,6 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-
-# Γραμματοσειρά PDF που υποστηρίζει ελληνικά (αν υπάρχει).
-PDF_FONT_NAME = "Helvetica"
-try:
-    _font_candidates = [
-        "DejaVuSans.ttf",
-        os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf"),
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-        "C:\\Windows\\Fonts\\DejaVuSans.ttf",
-        "C:\\Windows\\Fonts\\arial.ttf",
-    ]
-    for _fpath in _font_candidates:
-        if os.path.exists(_fpath):
-            pdfmetrics.registerFont(TTFont("GreekPDF", _fpath))
-            PDF_FONT_NAME = "GreekPDF"
-            break
-except Exception:
-    # Αν κάτι πάει στραβά, συνεχίζουμε με την default Helvetica
-    PDF_FONT_NAME = "Helvetica"
-
-
 # ---------- ΡΥΘΜΙΣΕΙΣ / ΣΤΑΘΕΡΕΣ ----------
 
 # Ζώδια: Ελληνικά -> Αγγλικά
@@ -184,29 +160,25 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontName=PDF_FONT_NAME,
-        fontSize=18,
-        textColor='#2C3E50',
-        spaceAfter=18,
-        alignment=TA_CENTER,
+        fontSize=16,
+        textColor='#4A4A4A',
+        spaceAfter=12,
+        alignment=TA_CENTER
     )
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading2'],
-        fontName=PDF_FONT_NAME,
-        fontSize=13,
+        fontSize=12,
         textColor='#2C3E50',
-        spaceAfter=8,
-        spaceBefore=14,
-        alignment=TA_LEFT,
+        spaceAfter=10,
+        spaceBefore=10
     )
     body_style = ParagraphStyle(
         'CustomBody',
         parent=styles['BodyText'],
-        fontName=PDF_FONT_NAME,
-        fontSize=11,
-        leading=16,
-        alignment=TA_LEFT,
+        fontSize=10,
+        leading=14,
+        alignment=TA_LEFT
     )
     
     # Τίτλος
@@ -240,7 +212,7 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     json_str = json.dumps(payload, ensure_ascii=False, indent=2)
     for line in json_str.split('\n')[:50]:  # Πρώτες 50 γραμμές
         safe_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        story.append(Paragraph(f"<font name='{PDF_FONT_NAME}' size='8'>{safe_line}</font>", body_style))
+        story.append(Paragraph(f"<font name=Courier size=8>{safe_line}</font>", body_style))
     
     doc.build(story)
     buffer.seek(0)
@@ -261,6 +233,8 @@ def main():
     # Session state
     if "reset_counter" not in st.session_state:
         st.session_state.reset_counter = 0
+    if "prev_asc" not in st.session_state:
+        st.session_state.prev_asc = None
 
     # ----- ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ -----
     st.header("0. Βασικά στοιχεία χάρτη")
@@ -299,14 +273,13 @@ def main():
         with col:
             key = f"house_{i}_{st.session_state.reset_counter}"
             if i == 1:
-                # Ο 1ος οίκος έχει ΠΑΝΤΑ το ίδιο ζώδιο με τον Ωροσκόπο.
-                # Τον δείχνουμε ως read‑only selectbox για να είναι ξεκάθαρο.
-                sign = asc_sign_gr
-                default_index = SIGNS_WITH_EMPTY.index(sign) if sign in SIGNS_WITH_EMPTY else 0
-                st.selectbox(
+                # Ο 1ος οίκος είναι ΠΑΝΤΑ ίδιος με τον Ωροσκόπο.
+                # Συγχρονίζουμε την τιμή του state με το asc_sign_gr.
+                if asc_sign_gr in SIGNS_WITH_EMPTY:
+                    st.session_state[key] = asc_sign_gr
+                sign = st.selectbox(
                     "Οίκος 1 (ίδιος με Ωροσκόπο)",
                     SIGNS_WITH_EMPTY,
-                    index=default_index,
                     key=key,
                     disabled=True,
                 )
