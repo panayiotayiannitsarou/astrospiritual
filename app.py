@@ -258,29 +258,6 @@ def main():
         st.session_state.reset_counter = 0
     if "prev_asc" not in st.session_state:
         st.session_state.prev_asc = None
-    if "loaded_chart_json" not in st.session_state:
-        st.session_state.loaded_chart_json = None
-
-    # Sidebar: φόρτωση αποθηκευμένου χάρτη
-    st.sidebar.header("📂 Φόρτωση αποθηκευμένου χάρτη")
-    uploaded_chart = st.sidebar.file_uploader("Φόρτωσε JSON χάρτη", type="json")
-    if uploaded_chart is not None:
-        try:
-            loaded_payload = json.load(uploaded_chart)
-            st.session_state.loaded_chart_json = json.dumps(loaded_payload, ensure_ascii=False, indent=2)
-            st.sidebar.success("✅ Ο χάρτης φορτώθηκε επιτυχώς.")
-        except Exception as e:
-            st.sidebar.error(f"Σφάλμα κατά τη φόρτωση του αρχείου: {e}")
-
-    if st.session_state.loaded_chart_json is not None:
-        edited = st.sidebar.text_area(
-            "Επεξεργασία JSON χάρτη (προαιρετικό, για προχωρημένους)",
-            st.session_state.loaded_chart_json,
-            height=260,
-        )
-        st.session_state.loaded_chart_json = edited
-    else:
-        st.sidebar.info("Μπορείς να αποθηκεύσεις έναν χάρτη ως JSON από την κύρια φόρμα και να τον φορτώσεις εδώ αργότερα.")
 
     # ----- ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ -----
     st.header("0. Βασικά στοιχεία χάρτη")
@@ -313,24 +290,25 @@ def main():
     st.markdown("Διάβασε από τον χάρτη σου σε ποιο ζώδιο ξεκινά κάθε οίκος (1–12) και διάλεξέ το.")
 
     houses_signs_gr = {}
+    # Συγχρονισμός Οίκου 1 με τον Ωροσκόπο
+    house1_key = f"house_1_{st.session_state.reset_counter}"
+    if asc_sign_gr in SIGNS_WITH_EMPTY:
+        st.session_state[house1_key] = asc_sign_gr
+    else:
+        # Αν δεν έχει επιλεγεί ακόμη Ωροσκόπος, κρατάμε κενό
+        st.session_state[house1_key] = SIGNS_WITH_EMPTY[0]
+
     cols = st.columns(4)
     for i in range(1, 13):
         col = cols[(i - 1) % 4]
         with col:
             if i == 1:
-                # Ο 1ος οίκος είναι πάντα ίδιος με τον Ωροσκόπο
-                # Τον εμφανίζουμε σαν selectbox (όπως τους άλλους), αλλά δεν επιτρέπουμε αλλαγή.
-                if asc_sign_gr != "---":
-                    # Φορτώνουμε στο session state το ίδιο ζώδιο με τον Ωροσκόπο
-                    st.session_state[f"house_{i}_{st.session_state.reset_counter}"] = asc_sign_gr
-                    current = asc_sign_gr
-                else:
-                    current = "---"
+                # Ο 1ος Οίκος είναι πάντα στο ίδιο ζώδιο με τον Ωροσκόπο.
+                # Το πεδίο είναι απενεργοποιημένο για να αποφεύγονται λάθη.
                 sign = st.selectbox(
                     "Οίκος 1 (ίδιος με Ωροσκόπο)",
                     SIGNS_WITH_EMPTY,
-                    index=SIGNS_WITH_EMPTY.index(current),
-                    key=f"house_{i}_{st.session_state.reset_counter}",
+                    key=house1_key,
                     disabled=True,
                 )
             else:
@@ -481,14 +459,6 @@ def main():
         st.subheader("🔍 JSON δεδομένων χάρτη (είσοδος προς ChatGPT)")
         st.code(json.dumps(payload, ensure_ascii=False, indent=2), language="json")
 
-        # 💾 Αποθήκευση χάρτη σε JSON για μελλοντική χρήση
-        st.download_button(
-            label="💾 Αποθήκευση χάρτη (JSON)",
-            data=json.dumps(payload, ensure_ascii=False, indent=2),
-            file_name=f"chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            mime="application/json",
-        )
-
         st.subheader("🤖 Προσπάθεια αυτόματης παραγωγής αναφοράς με OpenAI")
         with st.spinner("Καλώ το μοντέλο..."):
             try:
@@ -508,48 +478,6 @@ def main():
             file_name=f"genethlio_xarth_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
             mime="application/pdf"
         )
-
-
-    # ----- ΑΝΑΦΟΡΑ ΑΠΟ ΑΠΟΘΗΚΕΥΜΕΝΟ ΧΑΡΤΗ -----
-    if st.session_state.loaded_chart_json:
-        st.markdown("---")
-        st.subheader("📂 Αναφορά από αποθηκευμένο χάρτη (JSON)")
-        col_full_saved, col_aspects_saved = st.columns(2)
-        with col_full_saved:
-            use_saved_full = st.button("📝 Πλήρης αναφορά από αποθηκευμένο χάρτη")
-        with col_aspects_saved:
-            use_saved_aspects = st.button("✨ Μόνο Ενότητα 3 – Όψεις (από αποθηκευμένο χάρτη)")
-
-        if use_saved_full or use_saved_aspects:
-            try:
-                saved_payload = json.loads(st.session_state.loaded_chart_json)
-            except Exception as e:
-                st.error(f"Το αποθηκευμένο JSON δεν είναι έγκυρο: {e}")
-                saved_payload = None
-
-            if saved_payload is not None:
-                st.subheader("🔍 JSON αποθηκευμένου χάρτη")
-                st.code(st.session_state.loaded_chart_json, language="json")
-
-                if use_saved_full:
-                    st.subheader("🤖 Πλήρης αναφορά με OpenAI από αποθηκευμένο χάρτη")
-                    with st.spinner("Καλώ το μοντέλο για πλήρη αναφορά..."):
-                        try:
-                            report_text_saved = generate_report_with_openai(saved_payload)
-                        except Exception as e:
-                            report_text_saved = f"Παρουσιάστηκε σφάλμα κατά την κλήση του OpenAI API:\n{e}"
-                    st.markdown("### 📜 Αναφορά (από αποθηκευμένο χάρτη)")
-                    st.write(report_text_saved)
-
-                if use_saved_aspects:
-                    st.subheader("✨ Αναλυτική ενότητα για Όψεις (από αποθηκευμένο χάρτη)")
-                    with st.spinner("Καλώ το μοντέλο για αναλυτικές όψεις..."):
-                        try:
-                            aspects_report_saved = generate_aspects_report_with_openai(saved_payload)
-                        except Exception as e:
-                            aspects_report_saved = f"Παρουσιάστηκε σφάλμα κατά την κλήση του OpenAI API:\n{e}"
-                    st.markdown("### 📜 Αναλυτικές Όψεις (από αποθηκευμένο χάρτη)")
-                    st.write(aspects_report_saved)
 
     # ----- ΕΠΑΝΕΚΚΙΝΗΣΗ -----
     st.markdown("---")
