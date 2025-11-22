@@ -308,14 +308,6 @@ def main():
             key=f"moon_sign_{st.session_state.reset_counter}",
         )
 
-    # Auto-sync Ωροσκόπος -> Οίκος 1
-    if asc_sign_gr != "---" and asc_sign_gr != st.session_state.prev_asc:
-        st.session_state.prev_asc = asc_sign_gr
-        asc_index = SIGNS_WITH_EMPTY.index(asc_sign_gr)
-        # Αποθηκεύουμε την ΤΙΜΗ του selectbox (το ζώδιο), όχι index
-        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_sign_gr
-        st.rerun()
-
     # ----- ΟΙΚΟΙ -----
     st.header("1. Ενότητα 1 – Ακμές οίκων (ζώδιο σε κάθε οίκο)")
     st.markdown("Διάβασε από τον χάρτη σου σε ποιο ζώδιο ξεκινά κάθε οίκος (1–12) και διάλεξέ το.")
@@ -325,11 +317,20 @@ def main():
     for i in range(1, 13):
         col = cols[(i - 1) % 4]
         with col:
-            sign = st.selectbox(
-                f"Οίκος {i}",
-                SIGNS_WITH_EMPTY,
-                key=f"house_{i}_{st.session_state.reset_counter}",
-            )
+            if i == 1:
+                # Ο 1ος οίκος είναι πάντα ίδιος με τον Ωροσκόπο
+                if asc_sign_gr == "---":
+                    st.markdown("**Οίκος 1**: επίλεξε πρώτα Ωροσκόπο παραπάνω.")
+                    sign = "---"
+                else:
+                    st.markdown(f"**Οίκος 1** (ίδιος με Ωροσκόπο): **{asc_sign_gr}**")
+                    sign = asc_sign_gr
+            else:
+                sign = st.selectbox(
+                    f"Οίκος {i}",
+                    SIGNS_WITH_EMPTY,
+                    key=f"house_{i}_{st.session_state.reset_counter}",
+                )
         houses_signs_gr[i] = sign
 
     # ----- ΠΛΑΝΗΤΕΣ -----
