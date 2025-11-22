@@ -8,8 +8,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 # ---------- ΡΥΘΜΙΣΕΙΣ / ΣΤΑΘΕΡΕΣ ----------
@@ -31,7 +29,7 @@ SIGNS_GR_TO_EN = {
 }
 
 SIGNS_GR_LIST = list(SIGNS_GR_TO_EN.keys())
-SIGNS_WITH_EMPTY = ["---"] + SIGNS_GR_LIST  # Για dropdowns με κενή επιλογή
+SIGNS_WITH_EMPTY = ["---"] + SIGNS_GR_LIST
 
 # Κυβερνήτες ζωδίων (Αγγλικά)
 SIGN_RULERS = {
@@ -63,6 +61,8 @@ PLANET_EN_TO_GR = {
     "Pluto": "Πλούτωνας",
     "Chiron": "Χείρωνας",
     "North Node": "Βόρειος Δεσμός",
+    "AC": "AC",
+    "MC": "MC",
 }
 
 # Πλανήτες: (Ελληνικά, Αγγλικά)
@@ -77,8 +77,10 @@ PLANETS = [
     ("Ουρανός", "Uranus"),
     ("Ποσειδώνας", "Neptune"),
     ("Πλούτωνας", "Pluto"),
-    ("Χείρωνας", "Chiron"),
     ("Βόρειος Δεσμός", "North Node"),
+    ("Χείρωνας", "Chiron"),
+    ("AC", "AC"),
+    ("MC", "MC"),
 ]
 
 # Όψεις: label για UI -> κωδικός για JSON
@@ -101,10 +103,7 @@ def get_openai_client():
 
 
 def generate_report_with_openai(payload: dict) -> str:
-    """
-    Καλεί το OpenAI Chat Completions API και ζητά να γραφτεί η αναφορά
-    με βάση τις 3 ενότητες που έχουμε σχεδιάσει.
-    """
+    """Καλεί το OpenAI Chat Completions API και ζητά να γραφτεί η αναφορά."""
     client = get_openai_client()
     if client is None:
         return (
@@ -150,6 +149,76 @@ def generate_report_with_openai(payload: dict) -> str:
     return response.choices[0].message.content
 
 
+def create_pdf(payload: dict, report_text: str) -> BytesIO:
+    """Δημιουργεί PDF με JSON δεδομένα και αναφορά."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm)
+    story = []
+    
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor='#4A4A4A',
+        spaceAfter=12,
+        alignment=TA_CENTER
+    )
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=12,
+        textColor='#2C3E50',
+        spaceAfter=10,
+        spaceBefore=10
+    )
+    body_style = ParagraphStyle(
+        'CustomBody',
+        parent=styles['BodyText'],
+        fontSize=10,
+        leading=14,
+        alignment=TA_LEFT
+    )
+    
+    # Τίτλος
+    story.append(Paragraph("Προσωπική Έκθεση Γενέθλιου Χάρτη", title_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    # Ημερομηνία δημιουργίας
+    date_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    story.append(Paragraph(f"Δημιουργήθηκε: {date_str}", body_style))
+    story.append(Spacer(1, 1*cm))
+    
+    # Βασικά στοιχεία
+    basic = payload.get("basic_info", {})
+    story.append(Paragraph("Βασικά Στοιχεία", heading_style))
+    story.append(Paragraph(f"Ζώδιο Ήλιου: {basic.get('sun_sign_gr', 'N/A')}", body_style))
+    story.append(Paragraph(f"Ωροσκόπος: {basic.get('asc_sign_gr', 'N/A')}", body_style))
+    story.append(Paragraph(f"Ζώδιο Σελήνης: {basic.get('moon_sign_gr', 'N/A')}", body_style))
+    story.append(Spacer(1, 1*cm))
+    
+    # Αναφορά
+    story.append(Paragraph("Αναλυτική Αναφορά", heading_style))
+    for para in report_text.split('\n\n'):
+        if para.strip():
+            safe_para = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            story.append(Paragraph(safe_para, body_style))
+            story.append(Spacer(1, 0.3*cm))
+    
+    # JSON data
+    story.append(PageBreak())
+    story.append(Paragraph("Τεχνικά Δεδομένα (JSON)", heading_style))
+    json_str = json.dumps(payload, ensure_ascii=False, indent=2)
+    for line in json_str.split('\n')[:50]:  # Πρώτες 50 γραμμές
+        safe_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        story.append(Paragraph(f"<font name=Courier size=8>{safe_line}</font>", body_style))
+    
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+
 # ---------- UI STREAMLIT ----------
 
 def main():
@@ -161,15 +230,13 @@ def main():
         "και να φτιάχνεις δομημένα δεδομένα για μια αναλυτική έκθεση με ChatGPT."
     )
 
-    # Session reset counter για force refresh των widgets
+    # Session state
     if "reset_counter" not in st.session_state:
         st.session_state.reset_counter = 0
-    
-    # Προηγούμενη τιμή Ωροσκόπου για auto-sync
     if "prev_asc" not in st.session_state:
         st.session_state.prev_asc = None
 
-    # ----- ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ ΧΑΡΤΗ -----
+    # ----- ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ -----
     st.header("0. Βασικά στοιχεία χάρτη")
 
     col1, col2, col3 = st.columns(3)
@@ -178,26 +245,32 @@ def main():
             "Ζώδιο Ήλιου",
             SIGNS_WITH_EMPTY,
             index=0,
-            key=f"sun_sign_{st.session_state.reset_counter}"
+            key=f"sun_sign_{st.session_state.reset_counter}",
         )
     with col2:
         asc_sign_gr = st.selectbox(
             "Ωροσκόπος",
             SIGNS_WITH_EMPTY,
             index=0,
-            key=f"asc_sign_{st.session_state.reset_counter}"
+            key=f"asc_sign_{st.session_state.reset_counter}",
         )
     with col3:
         moon_sign_gr = st.selectbox(
             "Ζώδιο Σελήνης",
             SIGNS_WITH_EMPTY,
             index=0,
-            key=f"moon_sign_{st.session_state.reset_counter}"
+            key=f"moon_sign_{st.session_state.reset_counter}",
         )
 
-    # ----- ΕΝΟΤΗΤΑ 1: ΟΙΚΟΙ -----
-    st.header("1. Ενότητα 1 – Ακμές οίκων (ζώδιο σε κάθε οίκο)")
+    # Auto-sync Ωροσκόπος -> Οίκος 1
+    if asc_sign_gr != "---" and asc_sign_gr != st.session_state.prev_asc:
+        st.session_state.prev_asc = asc_sign_gr
+        asc_index = SIGNS_WITH_EMPTY.index(asc_sign_gr)
+        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_index
+        st.rerun()
 
+    # ----- ΟΙΚΟΙ -----
+    st.header("1. Ενότητα 1 – Ακμές οίκων (ζώδιο σε κάθε οίκο)")
     st.markdown("Διάβασε από τον χάρτη σου σε ποιο ζώδιο ξεκινά κάθε οίκος (1–12) και διάλεξέ το.")
 
     houses_signs_gr = {}
@@ -212,30 +285,25 @@ def main():
             )
         houses_signs_gr[i] = sign
 
-    # ----- ΕΝΟΤΗΤΑ 2: ΠΛΑΝΗΤΕΣ ΣΕ ΟΙΚΟΥΣ -----
+    # ----- ΠΛΑΝΗΤΕΣ -----
     st.header("2. Ενότητα 2 – Πλανήτες σε οίκους")
-
     st.markdown(
         "Για κάθε οίκο (1–12), διάλεξε ποιοι πλανήτες/Χείρωνας/Βόρειος Δεσμός/AC/MC βρίσκονται μέσα σε αυτόν τον οίκο.\n"
         "Αν ο οίκος δεν έχει κανέναν, τικάρισε μόνο το 'Κανένας'."
     )
 
     planet_names_gr = [gr for gr, en in PLANETS]
-    planet_choices_base = ["Κανένας"] + planet_names_gr
-
     house_planets_map = {}
     cols_h2 = st.columns(4)
     
     for i in range(1, 13):
         col = cols_h2[(i - 1) % 4]
         with col:
-            # Βρες ποιοι πλανήτες έχουν ήδη επιλεγεί σε προηγούμενους οίκους
             already_selected = []
             for prev_house in range(1, i):
                 if prev_house in house_planets_map:
                     already_selected.extend(house_planets_map[prev_house])
             
-            # Αφαίρεσε τους ήδη επιλεγμένους από τις επιλογές (εκτός από "Κανένας")
             available_planets = ["Κανένας"] + [
                 p for p in planet_names_gr if p not in already_selected
             ]
@@ -247,7 +315,7 @@ def main():
             )
         house_planets_map[i] = selected_planets_gr
 
-    # Από το ανά οίκο -> φτιάχνουμε ανά πλανήτη
+    # Build planet_house_map
     planet_house_map = {}
     for house_num, planets_gr_list in house_planets_map.items():
         if "Κανένας" in planets_gr_list or len(planets_gr_list) == 0:
@@ -258,9 +326,8 @@ def main():
             en_name = next(en for (gr, en) in PLANETS if gr == gr_name)
             planet_house_map[en_name] = house_num
 
-    # ----- ΕΝΟΤΗΤΑ 3: ΟΨΕΙΣ -----
+    # ----- ΟΨΕΙΣ -----
     st.header("3. Ενότητα 3 – Όψεις ανάμεσα σε πλανήτες")
-
     st.markdown(
         "Για κάθε ζευγάρι πλανητών, αν υπάρχει σημαντική όψη, διάλεξε τη μορφή της. "
         "Αν δεν υπάρχει ή δεν θες να την ερμηνεύσεις, άφησέ το 'Καμία'."
@@ -282,21 +349,14 @@ def main():
             )
             aspects_selected_ui[(en1, en2)] = choice
 
-    # ----- ΚΟΥΜΠΙ ΔΗΜΙΟΥΡΓΙΑΣ ΑΝΑΦΟΡΑΣ -----
+    # ----- ΔΗΜΙΟΥΡΓΙΑ ΑΝΑΦΟΡΑΣ -----
     st.markdown("---")
     generate_button = st.button("📝 Δημιουργία αναφοράς")
 
     if generate_button:
-        # Validation: check αν έχουν συμπληρωθεί τα βασικά
         if sun_sign_gr == "---" or asc_sign_gr == "---" or moon_sign_gr == "---":
             st.error("⚠️ Παρακαλώ συμπλήρωσε Ζώδιο Ήλιου, Ωροσκόπο και Ζώδιο Σελήνης!")
             return
-
-        basic_info = { "
-                f"Η αναφορά θα δημιουργηθεί, αλλά έλεγξε τα δεδομένα σου."
-            )
-
-        basic_info = {return
 
         basic_info = {
             "sun_sign_gr": sun_sign_gr,
@@ -307,10 +367,9 @@ def main():
             "moon_sign": SIGNS_GR_TO_EN[moon_sign_gr],
         }
 
-        # Φτιάχνουμε houses με ruler & ruler_in_house
         houses = []
         for house_num, sign_gr in houses_signs_gr.items():
-            if sign_gr == "---":  # Skip κενές επιλογές
+            if sign_gr == "---":
                 continue
             sign_en = SIGNS_GR_TO_EN[sign_gr]
             ruler_en = SIGN_RULERS.get(sign_en)
@@ -371,10 +430,19 @@ def main():
         st.markdown("### 📜 Αναφορά")
         st.write(report_text)
 
-    # ----- ΚΟΥΜΠΙ ΕΠΑΝΕΚΚΙΝΗΣΗΣ -----
+        # PDF Download
+        st.markdown("---")
+        pdf_buffer = create_pdf(payload, report_text)
+        st.download_button(
+            label="📄 Λήψη Αναφοράς σε PDF",
+            data=pdf_buffer,
+            file_name=f"genethlio_xarth_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mime="application/pdf"
+        )
+
+    # ----- ΕΠΑΝΕΚΚΙΝΗΣΗ -----
     st.markdown("---")
     if st.button("🔄 Επανεκκίνηση (μηδενισμός όλων των δεδομένων)"):
-        # Αύξηση counter για reset όλων των widgets
         st.session_state.reset_counter += 1
         st.rerun()
 
