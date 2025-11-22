@@ -263,10 +263,12 @@ def main():
         )
 
     # Auto-sync Ωροσκόπος -> Οίκος 1
+    # Κάθε φορά που αλλάζει ο Ωροσκόπος, ενημερώνεται αυτόματα ο Οίκος 1
+    # ώστε να έχει το ίδιο ζώδιο. Δεν χρειάζεται να το γράφει η/ο χρήστης χειροκίνητα.
     if asc_sign_gr != "---" and asc_sign_gr != st.session_state.prev_asc:
         st.session_state.prev_asc = asc_sign_gr
-        asc_index = SIGNS_WITH_EMPTY.index(asc_sign_gr)
-        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_index
+        # Στο session_state αποθηκεύουμε την τιμή (π.χ. "Κριός"), όχι το index
+        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_sign_gr
         st.rerun()
 
     # ----- ΟΙΚΟΙ -----
