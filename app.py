@@ -13,26 +13,25 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# Επιλογή Unicode γραμματοσειράς για σωστή εμφάνιση ελληνικών στο PDF.
-PDF_FONT_NAME = "Helvetica"  # fallback
-_font_candidates = [
-    "DejaVuSans.ttf",
-    os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf"),
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-    "C:\\Windows\\Fonts\\DejaVuSans.ttf",
-    "C:\\Windows\\Fonts\\arial.ttf",
-]
-
-for _fpath in _font_candidates:
-    try:
-        if _fpath and os.path.exists(_fpath):
+# Γραμματοσειρά PDF που υποστηρίζει ελληνικά (αν υπάρχει).
+PDF_FONT_NAME = "Helvetica"
+try:
+    _font_candidates = [
+        "DejaVuSans.ttf",
+        os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf"),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "C:\\Windows\\Fonts\\DejaVuSans.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+    ]
+    for _fpath in _font_candidates:
+        if os.path.exists(_fpath):
             pdfmetrics.registerFont(TTFont("GreekPDF", _fpath))
             PDF_FONT_NAME = "GreekPDF"
             break
-    except Exception:
-        # Αν αποτύχει κάποιο αρχείο, συνεχίζουμε με το επόμενο
-        pass
+except Exception:
+    # Αν κάτι πάει στραβά, συνεχίζουμε με την default Helvetica
+    PDF_FONT_NAME = "Helvetica"
 
 
 # ---------- ΡΥΘΜΙΣΕΙΣ / ΣΤΑΘΕΡΕΣ ----------
@@ -208,7 +207,6 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
         fontSize=11,
         leading=16,
         alignment=TA_LEFT,
-    )
     )
     
     # Τίτλος
