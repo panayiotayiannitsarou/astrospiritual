@@ -319,12 +319,18 @@ def main():
         with col:
             if i == 1:
                 # Ο 1ος οίκος είναι πάντα ίδιος με τον Ωροσκόπο
-                if asc_sign_gr == "---":
-                    st.markdown("**Οίκος 1**: επίλεξε πρώτα Ωροσκόπο παραπάνω.")
-                    sign = "---"
+                # Τον εμφανίζουμε σαν selectbox, αλλά δεν επιτρέπουμε αλλαγή
+                if asc_sign_gr not in SIGNS_WITH_EMPTY:
+                    current = "---"
                 else:
-                    st.markdown(f"**Οίκος 1** (ίδιος με Ωροσκόπο): **{asc_sign_gr}**")
-                    sign = asc_sign_gr
+                    current = asc_sign_gr
+                sign = st.selectbox(
+                    "Οίκος 1 (ίδιος με Ωροσκόπο)",
+                    SIGNS_WITH_EMPTY,
+                    index=SIGNS_WITH_EMPTY.index(current),
+                    key=f"house_{i}_{st.session_state.reset_counter}",
+                    disabled=True,
+                )
             else:
                 sign = st.selectbox(
                     f"Οίκος {i}",
