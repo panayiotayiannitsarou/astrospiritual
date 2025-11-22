@@ -291,10 +291,12 @@ def main():
         )
 
     # Auto-sync Ωροσκόπος -> Οίκος 1
+    # Όταν αλλάζει ο Ωροσκόπος, φροντίζουμε ο Οίκος 1 να έχει το ίδιο ζώδιο.
+    # Το selectbox του Οίκου 1 περιμένει ως state τιμή το ίδιο το ζώδιο (string),
+    # όχι index. Οπότε αποθηκεύουμε απευθείας το asc_sign_gr.
     if asc_sign_gr != "---" and asc_sign_gr != st.session_state.prev_asc:
         st.session_state.prev_asc = asc_sign_gr
-        asc_index = SIGNS_WITH_EMPTY.index(asc_sign_gr)
-        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_index
+        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_sign_gr
         st.rerun()
 
     # ----- ΟΙΚΟΙ -----
