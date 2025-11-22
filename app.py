@@ -9,6 +9,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 # ---------- ΡΥΘΜΙΣΕΙΣ / ΣΤΑΘΕΡΕΣ ----------
 
@@ -164,11 +166,21 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm)
     story = []
     
+    # Register Unicode font for proper Greek rendering
+    base_font = "Helvetica"
+    try:
+        pdfmetrics.registerFont(TTFont("DejaVuSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
+        base_font = "DejaVuSans"
+    except Exception:
+        # Αν για κάποιο λόγο δεν βρεθεί η γραμματοσειρά, συνεχίζουμε με την προεπιλεγμένη
+        pass
+
     # Styles
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
+        fontName=base_font,
         fontSize=16,
         textColor='#4A4A4A',
         spaceAfter=12,
@@ -177,6 +189,7 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading2'],
+        fontName=base_font,
         fontSize=12,
         textColor='#2C3E50',
         spaceAfter=10,
@@ -185,6 +198,7 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     body_style = ParagraphStyle(
         'CustomBody',
         parent=styles['BodyText'],
+        fontName=base_font,
         fontSize=10,
         leading=14,
         alignment=TA_LEFT
@@ -302,7 +316,9 @@ def main():
         "Αν ο οίκος δεν έχει κανέναν, τικάρισε μόνο το 'Κανένας'."
     )
 
-    planet_names_gr = [gr for gr, en in PLANETS]
+    # Για τοποθέτηση σε οίκους ΔΕΝ θέλουμε AC και MC,
+    # τα κρατάμε μόνο για τις όψεις.
+    planet_names_gr = [gr for gr, en in PLANETS if gr not in ('AC', 'MC')]
     house_planets_map = {}
     cols_h2 = st.columns(4)
     
@@ -348,6 +364,9 @@ def main():
 
     aspects_selected_ui = {}
     for i, (gr1, en1) in enumerate(PLANETS):
+        # Δεν θέλουμε ξεχωριστές ενότητες 'Όψεις AC' και 'Όψεις MC'
+        if gr1 in ("AC", "MC"):
+            continue
         st.markdown(f"#### Όψεις {gr1}")
         for j in range(i + 1, len(PLANETS)):
             gr2, en2 = PLANETS[j]
