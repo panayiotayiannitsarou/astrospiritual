@@ -73,14 +73,13 @@ PLANETS = [
 ]
 
 # Όψεις: label για UI -> κωδικός για JSON
-# Χρήση HTML για χρωματιστά σύμβολα (όπως στο astro.com)
 ASPECT_OPTIONS = [
     ("Καμία", None),
-    ('<span style="color: red;">☌</span> Σύνοδος (0°)', "conjunction"),
-    ('<span style="color: red;">☍</span> Αντίθεση (180°)', "opposition"),
-    ('<span style="color: blue;">△</span> Τρίγωνο (120°)', "trine"),
-    ('<span style="color: red;">□</span> Τετράγωνο (90°)', "square"),
-    ('<span style="color: blue;">⚹</span> Εξάγωνο (60°)', "sextile"),
+    ("🔴 ☌ Σύνοδος (0°)", "conjunction"),
+    ("🔴 ☍ Αντίθεση (180°)", "opposition"),
+    ("🔵 △ Τρίγωνο (120°)", "trine"),
+    ("🔴 □ Τετράγωνο (90°)", "square"),
+    ("🔵 ⚹ Εξάγωνο (60°)", "sextile"),
 ]
 
 
@@ -251,12 +250,9 @@ def main():
         for j in range(i + 1, len(PLANETS)):
             gr2, en2 = PLANETS[j]
             key = f"aspect_{en1}_{en2}_{st.session_state.reset_counter}"
-            
-            # Render με HTML για χρωματιστά σύμβολα
             choice = st.selectbox(
                 f"{gr1} – {gr2}",
                 aspect_labels,
-                format_func=lambda x: x,  # Δείχνει HTML ως έχει
                 key=key,
             )
             aspects_selected_ui[(en1, en2)] = choice
