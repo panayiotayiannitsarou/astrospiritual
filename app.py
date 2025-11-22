@@ -261,8 +261,6 @@ def main():
     # Session state
     if "reset_counter" not in st.session_state:
         st.session_state.reset_counter = 0
-    if "prev_asc" not in st.session_state:
-        st.session_state.prev_asc = None
 
     # ----- ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ -----
     st.header("0. Βασικά στοιχεία χάρτη")
@@ -290,15 +288,6 @@ def main():
             key=f"moon_sign_{st.session_state.reset_counter}",
         )
 
-    # Auto-sync Ωροσκόπος -> Οίκος 1
-    # Όταν αλλάζει ο Ωροσκόπος, φροντίζουμε ο Οίκος 1 να έχει το ίδιο ζώδιο.
-    # Το selectbox του Οίκου 1 περιμένει ως state τιμή το ίδιο το ζώδιο (string),
-    # όχι index. Οπότε αποθηκεύουμε απευθείας το asc_sign_gr.
-    if asc_sign_gr != "---" and asc_sign_gr != st.session_state.prev_asc:
-        st.session_state.prev_asc = asc_sign_gr
-        st.session_state[f"house_1_{st.session_state.reset_counter}"] = asc_sign_gr
-        st.rerun()
-
     # ----- ΟΙΚΟΙ -----
     st.header("1. Ενότητα 1 – Ακμές οίκων (ζώδιο σε κάθε οίκο)")
     st.markdown("Διάβασε από τον χάρτη σου σε ποιο ζώδιο ξεκινά κάθε οίκος (1–12) και διάλεξέ το.")
@@ -308,11 +297,25 @@ def main():
     for i in range(1, 13):
         col = cols[(i - 1) % 4]
         with col:
-            sign = st.selectbox(
-                f"Οίκος {i}",
-                SIGNS_WITH_EMPTY,
-                key=f"house_{i}_{st.session_state.reset_counter}",
-            )
+            key = f"house_{i}_{st.session_state.reset_counter}"
+            if i == 1:
+                # Ο 1ος οίκος έχει ΠΑΝΤΑ το ίδιο ζώδιο με τον Ωροσκόπο.
+                # Τον δείχνουμε ως read‑only selectbox για να είναι ξεκάθαρο.
+                sign = asc_sign_gr
+                default_index = SIGNS_WITH_EMPTY.index(sign) if sign in SIGNS_WITH_EMPTY else 0
+                st.selectbox(
+                    "Οίκος 1 (ίδιος με Ωροσκόπο)",
+                    SIGNS_WITH_EMPTY,
+                    index=default_index,
+                    key=key,
+                    disabled=True,
+                )
+            else:
+                sign = st.selectbox(
+                    f"Οίκος {i}",
+                    SIGNS_WITH_EMPTY,
+                    key=key,
+                )
         houses_signs_gr[i] = sign
 
     # ----- ΠΛΑΝΗΤΕΣ -----
