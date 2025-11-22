@@ -105,7 +105,7 @@ def generate_report_with_openai(payload: dict) -> str:
 
     system_prompt = (
         "Είσαι έμπειρη αστρολόγος.\n"
-        "Λαμβάνεις ως είσοδο ένα JSON με δομή γενέθλιου χάρτη: basic_info, houses, "
+        "Λαμβάνεις ως είσοδο ένα JSON με δομή γενέθλιου χάρτη: basic_info (Ήλιος, Ωροσκόπος, Σελήνη), houses, "
         "planets_in_houses και aspects.\n"
         "Θέλω να γράφεις ΠΑΝΤΑ σε καλή, καθαρή ελληνική γλώσσα.\n\n"
         "Να ακολουθείς αυτή τη δομή αναφοράς:\n"
@@ -156,13 +156,10 @@ def main():
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        birth_date = st.text_input("Ημερομηνία γέννησης", placeholder="π.χ. 30/03/1995")
-        birth_time = st.text_input("Ώρα γέννησης", placeholder="π.χ. 03:00")
-    with col2:
-        birth_place = st.text_input("Τόπος γέννησης", placeholder="π.χ. Βόλος, Ελλάδα")
-    with col3:
         sun_sign_gr = st.selectbox("Ζώδιο Ήλιου", SIGNS_GR_LIST, index=SIGNS_GR_LIST.index("Υδροχόος"))
+    with col2:
         asc_sign_gr = st.selectbox("Ωροσκόπος", SIGNS_GR_LIST, index=SIGNS_GR_LIST.index("Τοξότης"))
+    with col3:
         moon_sign_gr = st.selectbox("Ζώδιο Σελήνης", SIGNS_GR_LIST, index=SIGNS_GR_LIST.index("Παρθένος"))
 
     # ----- ΕΝΟΤΗΤΑ 1: ΟΙΚΟΙ -----
@@ -246,9 +243,6 @@ def main():
 
     if generate_button:
         basic_info = {
-            "birth_date": birth_date,
-            "birth_time": birth_time,
-            "birth_place": birth_place,
             "sun_sign_gr": sun_sign_gr,
             "sun_sign": SIGNS_GR_TO_EN[sun_sign_gr],
             "asc_sign_gr": asc_sign_gr,
