@@ -1,10 +1,7 @@
 import os
 import json
-import hashlib
 from io import BytesIO
 from datetime import datetime
-from typing import Dict, List, Optional
-
 import streamlit as st
 from openai import OpenAI
 from reportlab.lib.pagesizes import A4
@@ -13,9 +10,11 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import ttfonts
 
-# ============ CONSTANTS (unchanged) ============
+TTFont = ttfonts.TTFont
+
+# Ζώδια: Ελληνικά -> Αγγλικά
 SIGNS_GR_TO_EN = {
     "Κριός": "Aries", "Ταύρος": "Taurus", "Δίδυμοι": "Gemini",
     "Καρκίνος": "Cancer", "Λέων": "Leo", "Παρθένος": "Virgo",
@@ -59,54 +58,20 @@ ASPECT_OPTIONS = [
 ]
 
 
-# ============ UTILITIES ============
-def get_openai_client() -> Optional[OpenAI]:
+def get_openai_client():
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return None
     return OpenAI(api_key=api_key)
 
 
-def compute_payload_hash(payload: dict) -> str:
-    """Compute SHA256 hash for caching."""
-    json_str = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(json_str.encode()).hexdigest()
-
-
-def validate_chart_data(payload: dict) -> List[str]:
-    """Validate chart completeness and return warnings."""
-    warnings = []
-    
-    # Check houses
-    houses = payload.get("houses", [])
-    if len(houses) < 12:
-        warnings.append(f"⚠️ Μόνο {len(houses)}/12 οίκοι συμπληρωμένοι")
-    
-    # Check planets placement
-    planets_placed = payload.get("planets_in_houses", [])
-    total_planets = len([p for p in PLANETS if p[1] not in ("AC", "MC")])
-    if len(planets_placed) < total_planets:
-        warnings.append(f"⚠️ Μόνο {len(planets_placed)}/{total_planets} πλανήτες τοποθετημένοι")
-    
-    # Check aspects
-    aspects = payload.get("aspects", [])
-    if len(aspects) == 0:
-        warnings.append("⚠️ Καμία όψη επιλεγμένη")
-    
-    return warnings
-
-
-# ============ OPENAI FUNCTIONS (with caching) ============
-@st.cache_data(show_spinner=False)
-def generate_basic_report_cached(payload_hash: str, payload: dict) -> str:
-    """Cached version of basic report generation."""
-    return generate_basic_report_with_openai(payload)
-
-
 def generate_basic_report_with_openai(payload: dict) -> str:
     client = get_openai_client()
     if client is None:
-        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον."
+        return (
+            "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον.\n"
+            "Ρύθμισέ το για να μπορεί να κληθεί αυτόματα το ChatGPT."
+        )
 
     system_prompt = """Είσαι έμπειρη αστρολόγος.
 Λαμβάνεις ως είσοδο ένα JSON με δομή γενέθλιου χάρτη: basic_info, houses, planets_in_houses και aspects.
@@ -139,15 +104,10 @@ def generate_basic_report_with_openai(payload: dict) -> str:
     return response.choices[0].message.content
 
 
-@st.cache_data(show_spinner=False)
-def generate_section4_report_cached(payload_hash: str, payload: dict) -> str:
-    return generate_section4_report_with_openai(payload)
-
-
 def generate_section4_report_with_openai(payload: dict) -> str:
     client = get_openai_client()
     if client is None:
-        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY."
+        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον."
 
     system_prompt = """Είσαι έμπειρη αστρολόγος.
 Με βάση το JSON, θέλω να γράψεις ΜΟΝΟ την ΕΝΟΤΗΤΑ 4 – Ταλέντα, Δυνατότητες & Εσωτερική Πορεία.
@@ -179,20 +139,25 @@ def generate_section4_report_with_openai(payload: dict) -> str:
     return response.choices[0].message.content
 
 
-@st.cache_data(show_spinner=False)
-def generate_section5_aspects_cached(payload_hash: str, payload: dict) -> str:
-    return generate_section5_aspects_with_openai(payload)
-
-
 def generate_section5_aspects_with_openai(payload: dict) -> str:
+    """
+    ΜΟΝΟ Ενότητα 5 – Όψεις (σε υποενότητες 5Α, 5Β, 5Γ).
+    Χρησιμοποιεί ΟΛΟ το context (basic_info, houses, planets_in_houses),
+    αλλά αναλύει ΜΟΝΟ τις όψεις που υπάρχουν στη λίστα "aspects".
+    """
     client = get_openai_client()
     if client is None:
-        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY."
+        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον."
 
     system_prompt = """Είσαι έμπειρη αστρολόγος.
-Λαμβάνεις ως είσοδο ένα JSON με δομή γενέθλιου χάρτη.
+Λαμβάνεις ως είσοδο ένα JSON με δομή γενέθλιου χάρτη:
 
-Χρησιμοποίησε τα στοιχεία των οίκων και των πλανητών σε οίκους ΜΟΝΟ ως πλαίσιο.
+- basic_info: ζώδιο Ήλιου, Ωροσκόπου, Σελήνης (στα ελληνικά και αγγλικά),
+- houses: για κάθε οίκο 1–12, το ζώδιο της ακμής, ο κυβερνήτης του ζωδίου και (αν υπάρχει) ο οίκος στον οποίο βρίσκεται ο κυβερνήτης,
+- planets_in_houses: σε ποιον οίκο βρίσκεται κάθε πλανήτης/σημείο,
+- aspects: λίστα από όψεις ανάμεσα σε δυο πλανήτες/σημεία.
+
+Χρησιμοποίησε τα στοιχεία των οίκων και των πλανητών σε οίκους ΜΟΝΟ ως πλαίσιο, για να καταλαβαίνεις καλύτερα τα θέματα ζωής που ενεργοποιεί κάθε όψη.
 ΔΕΝ θα γράψεις ανάλυση οίκων ή ενότητα για πλανήτες σε οίκους.
 Θα γράψεις ΜΟΝΟ την ΕΝΟΤΗΤΑ 5 – Όψεις, χωρισμένη σε υποενότητες.
 
@@ -200,23 +165,36 @@ def generate_section5_aspects_with_openai(payload: dict) -> str:
 
 5Α. Βασικές ψυχολογικές όψεις
 - Εδώ θα βάλεις όψεις που περιλαμβάνουν τον Ήλιο (Sun), τη Σελήνη (Moon), τον Ωροσκόπο (AC) ή τον κυβερνήτη Ωροσκόπου.
-- Για κάθε τέτοια όψη γράψε ΜΙΑ ξεχωριστή, μικρή παράγραφο 3–4 προτάσεων.
+- Ο κυβερνήτης του Ωροσκόπου προκύπτει από το ζώδιο του Ωροσκόπου (π.χ. Κριός→Άρης, Ταύρος→Αφροδίτη, Τοξότης→Δίας, Υδροχόος→Ουρανός κ.λπ.).
+- Για κάθε τέτοια όψη γράψε ΜΙΑ ξεχωριστή, μικρή παράγραφο 3–4 προτάσεων:
+  πώς επηρεάζει τον χαρακτήρα, τη βασική ψυχολογία, τον τρόπο που νιώθει και εκφράζεται το άτομο.
 
 5Β. Θεραπευτικές / καρμικές όψεις
-- Εδώ θα βάλεις όψεις που περιλαμβάνουν Χείρωνα (Chiron), Βόρειο Δεσμό (North Node), Κρόνο (Saturn) ή Πλούτωνα (Pluto).
-- Για κάθε τέτοια όψη γράψε ΜΙΑ ξεχωριστή παράγραφο 3–5 προτάσεων.
+- Εδώ θα βάλεις όψεις που περιλαμβάνουν Χείρωνα (Chiron), Βόρειο Δεσμό (North Node), Κρόνο (Saturn) ή Πλούτωνα (Pluto),
+  καθώς και όψεις αυτών με AC ή MC.
+- Για κάθε τέτοια όψη γράψε ΜΙΑ ξεχωριστή παράγραφο 3–5 προτάσεων:
+  μίλησε για πληγές, μοτίβα, φόβους ή βάρη, αλλά και για το μάθημα, την πιθανή θεραπεία και την εξέλιξη που προσφέρει η όψη.
 
 5Γ. Λοιπές όψεις
-- Εδώ θα βάλεις όλες τις υπόλοιπες όψεις που απομένουν.
-- Για κάθε μία γράψε ΜΙΑ ξεχωριστή μικρή παράγραφο 2–4 προτάσεων.
+- Εδώ θα βάλεις όλες τις υπόλοιπες όψεις που απομένουν και δεν έχουν ήδη αναλυθεί στις προηγούμενες υποενότητες.
+- Για κάθε μία γράψε ΜΙΑ ξεχωριστή μικρή παράγραφο 2–4 προτάσεων:
+  πώς συνεργάζονται οι δυο πλανήτες, σε ποια θέματα ζωής, τι ταλέντο, ένταση ή δυναμική δημιουργείται.
 
 ΣΗΜΑΝΤΙΚΟ:
-- Η λίστα 'aspects' στο JSON περιέχει ΜΟΝΟ τις όψεις που θέλω να αναλύσεις.
+- Η λίστα 'aspects' στο JSON περιέχει ΜΟΝΟ τις όψεις που θέλω να αναλύσεις σε αυτή την αναφορά.
+  Μην υποθέτεις άλλες όψεις εκτός από αυτές.
 - Γράψε ξεχωριστή παράγραφο για ΚΑΘΕ όψη που υπάρχει στο JSON, χωρίς να τις συγχωνεύσεις.
+- Αν μια όψη θα μπορούσε να ανήκει σε περισσότερες από μία υποενότητες (π.χ. Ήλιος–Κρόνος),
+  διάλεξε την υποενότητα όπου η όψη έχει περισσότερο ψυχολογικό/θεραπευτικό βάρος (συνήθως 5Β).
+- Αν οι όψεις είναι πάρα πολλές (π.χ. πάνω από 10),
+  δώσε πιο αναλυτικό βάθος (3–5 προτάσεις) στις όψεις με Ήλιο, Σελήνη, Ωροσκόπο, Χείρωνα, Βόρειο Δεσμό, Κρόνο ή Πλούτωνα
+  και για τις υπόλοιπες αρκούν 2–3 καθαρές προτάσεις.
 
 ΥΦΟΣ:
 - Γράψε σε απλή, καθαρή, σύγχρονη ελληνική γλώσσα.
 - Να είναι ζεστό, ενδυναμωτικό, με σεβασμό, χωρίς μοιρολατρία.
+- Μη χρησιμοποιείς πολλή τεχνική ορολογία χωρίς εξήγηση.
+- Μη μιλάς για "καλό/κακό χάρτη". Μίλα για δυνατότητες, προκλήσεις και εξέλιξη.
 - Μην προσθέτεις γενική εισαγωγή για τις όψεις· ξεκίνα κατευθείαν από την υποενότητα 5Α."""
 
     user_prompt = f"""Παρακάτω είναι τα δεδομένα του χάρτη σε JSON.
@@ -240,12 +218,17 @@ def generate_section5_aspects_with_openai(payload: dict) -> str:
 
 
 def generate_per_aspect_report_with_openai(payload: dict, aspect_obj: dict) -> str:
+    """
+    Αναλύει ΜΙΑ ΜΟΝΟ όψη, αλλά στέλνει ολόκληρο το χάρτη (houses, planets_in_houses)
+    για να έχει πλήρες context.
+    """
     client = get_openai_client()
     if client is None:
         return "⚠️ Δεν βρέθηκε OPENAI_API_KEY."
 
     system_prompt = """Είσαι έμπειρη αστρολόγος.
-Θα λάβεις ένα ΠΛΗΡΕΣ JSON γενέθλιου χάρτη και μία ΣΥΓΚΕΚΡΙΜΕΝΗ όψη προς ανάλυση.
+Θα λάβεις ένα ΠΛΗΡΕΣ JSON γενέθλιου χάρτη (basic_info, houses, planets_in_houses, aspects).
+Αλλά θα σου δώσω και μία ΣΥΓΚΕΚΡΙΜΕΝΗ όψη προς ανάλυση.
 
 Η δουλειά σου:
 1. Να δεις σε ποιον οίκο βρίσκεται ο κάθε πλανήτης της όψης.
@@ -284,6 +267,10 @@ def generate_per_aspect_report_with_openai(payload: dict, aspect_obj: dict) -> s
 
 
 def generate_all_aspects_separately(payload: dict) -> str:
+    """
+    Καλεί το OpenAI για ΚΑΘΕ όψη ξεχωριστά, με πλήρες context.
+    Επιστρέφει ενωμένο κείμενο με όλες τις ερμηνείες.
+    """
     client = get_openai_client()
     if client is None:
         return "⚠️ Δεν βρέθηκε OPENAI_API_KEY."
@@ -297,17 +284,8 @@ def generate_all_aspects_separately(payload: dict) -> str:
     status_text = st.empty()
     
     total = len(aspects_list)
-    start_time = datetime.now()
-    
     for idx, aspect_obj in enumerate(aspects_list):
-        elapsed = (datetime.now() - start_time).total_seconds()
-        avg_time = elapsed / (idx + 1) if idx > 0 else 5
-        remaining = int(avg_time * (total - idx - 1))
-        
-        status_text.text(
-            f"Αναλύω όψη {idx+1}/{total}: {aspect_obj['p1_gr']} - {aspect_obj['p2_gr']} "
-            f"(~{remaining}s υπολειπόμενα)"
-        )
+        status_text.text(f"Αναλύω όψη {idx+1}/{total}: {aspect_obj['p1_gr']} - {aspect_obj['p2_gr']}")
         
         try:
             interp = generate_per_aspect_report_with_openai(payload, aspect_obj)
@@ -323,12 +301,17 @@ def generate_all_aspects_separately(payload: dict) -> str:
 
 
 def generate_full_report_with_openai(payload: dict) -> str:
+    """
+    Παράγει ΠΛΗΡΗ αναφορά: Ενότητες 0-3, 4, 5 σε ένα κείμενο.
+    Καλεί το OpenAI 3 φορές και ενώνει τα αποτελέσματα.
+    """
     client = get_openai_client()
     if client is None:
-        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY."
+        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον."
     
     report_parts = []
     
+    # Μέρος 1: Βασική αναφορά (0-3)
     try:
         basic = generate_basic_report_with_openai(payload)
         report_parts.append("=" * 80)
@@ -339,6 +322,7 @@ def generate_full_report_with_openai(payload: dict) -> str:
     except Exception as e:
         report_parts.append(f"⚠️ Σφάλμα στη βασική αναφορά: {e}\n\n")
     
+    # Μέρος 2: Ταλέντα (4)
     try:
         talents = generate_section4_report_with_openai(payload)
         report_parts.append("=" * 80)
@@ -349,6 +333,7 @@ def generate_full_report_with_openai(payload: dict) -> str:
     except Exception as e:
         report_parts.append(f"⚠️ Σφάλμα στην ενότητα 4: {e}\n\n")
     
+    # Μέρος 3: Όψεις (5)
     try:
         aspects = generate_section5_aspects_with_openai(payload)
         report_parts.append("=" * 80)
@@ -361,7 +346,6 @@ def generate_full_report_with_openai(payload: dict) -> str:
     return "\n".join(report_parts)
 
 
-# ============ PDF GENERATION (unchanged) ============
 def create_pdf(payload: dict, report_text: str) -> BytesIO:
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm)
@@ -417,19 +401,241 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     return buffer
 
 
-# ============ MAIN UI ============
 def main():
     st.set_page_config(page_title="Γενέθλιος Χάρτης – Beta", layout="wide")
-    st.title("🪷 Προσωπική Έκθεση Γενέθλιου Χάρτη – Beta (v2)")
+    st.title("🪷 Προσωπική Έκθεση Γενέθλιου Χάρτη – Beta")
 
-    st.markdown("""
-    Αυτό το εργαλείο σε βοηθά να διαβάζεις τον χάρτη από το astro.com 
-    και να φτιάχνεις δομημένα δεδομένα για μια αναλυτική έκθεση με ChatGPT.
-    
-    **🆕 Βελτιώσεις v2:**
-    - ✅ Collapsed sections για όψεις (91 selectboxes → συμπτυσσόμενα)
-    - ✅ Validation warnings για ελλιπή δεδομένα
-    - ✅ Caching OpenAI calls (γρηγορότερες επαναλήψεις)
-    - ✅ Export σε JSON & Markdown
-    - ✅ Estimated time για per-aspect analysis
-    """)
+    st.markdown("Αυτό το εργαλείο σε βοηθά να διαβάζεις τον χάρτη από το astro.com "
+                "και να φτιάχνεις δομημένα δεδομένα για μια αναλυτική έκθεση με ChatGPT.")
+
+    if "reset_counter" not in st.session_state:
+        st.session_state.reset_counter = 0
+
+    st.header("0. Βασικά στοιχεία χάρτη")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        sun_sign_gr = st.selectbox("Ζώδιο Ηλίου", SIGNS_WITH_EMPTY, index=0,
+            key=f"sun_sign_{st.session_state.reset_counter}")
+    with col2:
+        asc_sign_gr = st.selectbox("Ωροσκόπος", SIGNS_WITH_EMPTY, index=0,
+            key=f"asc_sign_{st.session_state.reset_counter}")
+    with col3:
+        moon_sign_gr = st.selectbox("Ζώδιο Σελήνης", SIGNS_WITH_EMPTY, index=0,
+            key=f"moon_sign_{st.session_state.reset_counter}")
+
+    st.header("1. Ενότητα 1 – Ακμές οίκων (ζώδιο σε κάθε οίκο)")
+    st.markdown("Διάβασε από τον χάρτη σου σε ποιο ζώδιο ξεκινά κάθε οίκος (1–12) και διάλεξέ το.")
+
+    houses_signs_gr = {}
+    house1_key = f"house_1_{st.session_state.reset_counter}"
+    st.session_state[house1_key] = asc_sign_gr if asc_sign_gr in SIGNS_WITH_EMPTY else SIGNS_WITH_EMPTY[0]
+
+    cols = st.columns(4)
+    for i in range(1, 13):
+        col = cols[(i - 1) % 4]
+        with col:
+            if i == 1:
+                sign = st.selectbox("Οίκος 1 (ίδιος με Ωροσκόπο)", SIGNS_WITH_EMPTY,
+                    key=house1_key, disabled=True)
+            else:
+                sign = st.selectbox(f"Οίκος {i}", SIGNS_WITH_EMPTY,
+                    key=f"house_{i}_{st.session_state.reset_counter}")
+        houses_signs_gr[i] = sign
+
+    st.header("2. Ενότητα 2 – Πλανήτες σε οίκους")
+    st.markdown("Για κάθε οίκο (1–12), διάλεξε ποιοι πλανήτες βρίσκονται μέσα σε αυτόν τον οίκο.")
+
+    planet_names_gr = [gr for gr, en in PLANETS if gr not in ('AC', 'MC')]
+    house_planets_map = {}
+    cols_h2 = st.columns(4)
+
+    for i in range(1, 13):
+        col = cols_h2[(i - 1) % 4]
+        with col:
+            already_selected = []
+            for prev_house in range(1, i):
+                if prev_house in house_planets_map:
+                    already_selected.extend(house_planets_map[prev_house])
+
+            available_planets = ["Κανένας"] + [p for p in planet_names_gr if p not in already_selected]
+            selected_planets_gr = st.multiselect(f"Πλανήτες στον Οίκο {i}", available_planets,
+                key=f"house_planets_{i}_{st.session_state.reset_counter}")
+        house_planets_map[i] = selected_planets_gr
+
+    planet_house_map = {}
+    for house_num, planets_gr_list in house_planets_map.items():
+        if "Κανένας" in planets_gr_list or len(planets_gr_list) == 0:
+            continue
+        for gr_name in planets_gr_list:
+            if gr_name == "Κανένας":
+                continue
+            en_name = next(en for (gr, en) in PLANETS if gr == gr_name)
+            planet_house_map[en_name] = house_num
+
+    st.header("3. Ενότητα 3 – Όψεις ανάμεσα σε πλανήτες")
+    st.markdown("Για κάθε ζευγάρι πλανητών, αν υπάρχει σημαντική όψη, διάλεξε τη μορφή της.")
+
+    aspect_labels = [opt[0] for opt in ASPECT_OPTIONS]
+    label_to_code = {opt[0]: opt[1] for opt in ASPECT_OPTIONS}
+
+    aspects_selected_ui = {}
+    for i, (gr1, en1) in enumerate(PLANETS):
+        if gr1 in ("AC", "MC"):
+            continue
+        st.markdown(f"#### Όψεις {gr1}")
+        for j in range(i + 1, len(PLANETS)):
+            gr2, en2 = PLANETS[j]
+            key = f"aspect_{en1}_{en2}_{st.session_state.reset_counter}"
+            choice = st.selectbox(f"{gr1} – {gr2}", aspect_labels, key=key)
+            aspects_selected_ui[(en1, en2)] = choice
+
+    st.markdown("---")
+    col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
+    with col_b1:
+        basic_button = st.button("📝 Βασική αναφορά (Ενότητες 0–3)")
+    with col_b2:
+        talents_button = st.button("🌟 Ενότητα 4 – Ταλέντα & Θεραπευτική Πορεία")
+    with col_b3:
+        aspects_button = st.button("🔮 Ενότητα 5 – Όψεις (αναλυτικά)")
+    with col_b4:
+        per_aspect_button = st.button("🔍 Ερμηνεία Κάθε Όψης Ξεχωριστά")
+    with col_b5:
+        full_button = st.button("📕 Πλήρης Αναφορά (Όλες οι Ενότητες)")
+
+    if basic_button or talents_button or aspects_button or per_aspect_button or full_button:
+        if sun_sign_gr == "---" or asc_sign_gr == "---" or moon_sign_gr == "---":
+            st.error("⚠️ Παρακαλώ συμπλήρωσε Ζώδιο Ηλίου, Ωροσκόπο και Ζώδιο Σελήνης!")
+            return
+
+        basic_info = {
+            "sun_sign_gr": sun_sign_gr, "sun_sign": SIGNS_GR_TO_EN[sun_sign_gr],
+            "asc_sign_gr": asc_sign_gr, "asc_sign": SIGNS_GR_TO_EN[asc_sign_gr],
+            "moon_sign_gr": moon_sign_gr, "moon_sign": SIGNS_GR_TO_EN[moon_sign_gr],
+        }
+
+        houses = []
+        for house_num, sign_gr in houses_signs_gr.items():
+            if sign_gr == "---":
+                continue
+            sign_en = SIGNS_GR_TO_EN[sign_gr]
+            ruler_en = SIGN_RULERS.get(sign_en)
+            ruler_gr = PLANET_EN_TO_GR.get(ruler_en, ruler_en) if ruler_en else None
+            ruler_in_house = planet_house_map.get(ruler_en)
+            houses.append({
+                "house": house_num, "sign_gr": sign_gr, "sign": sign_en,
+                "ruler": ruler_en, "ruler_gr": ruler_gr, "ruler_in_house": ruler_in_house,
+            })
+
+        planets_in_houses = []
+        for en_name, house_num in planet_house_map.items():
+            gr_name = next(gr for gr, en in PLANETS if en == en_name)
+            planets_in_houses.append({"planet": en_name, "planet_gr": gr_name, "house": house_num})
+
+        aspects = []
+        for (p1, p2), label in aspects_selected_ui.items():
+            code = label_to_code.get(label)
+            if code is None:
+                continue
+            gr1 = next(gr for gr, en in PLANETS if en == p1)
+            gr2 = next(gr for gr, en in PLANETS if en == p2)
+            aspects.append({
+                "p1": p1, "p1_gr": gr1, "p2": p2, "p2_gr": gr2,
+                "aspect": code, "aspect_label_gr": label,
+            })
+
+        payload = {
+            "basic_info": basic_info,
+            "houses": houses,
+            "planets_in_houses": planets_in_houses,
+            "aspects": aspects,
+        }
+
+        st.subheader("📋 JSON δεδομένων χάρτη")
+        st.code(json.dumps(payload, ensure_ascii=False, indent=2), language="json")
+
+        if basic_button:
+            st.subheader("🤖 Βασική αναφορά με OpenAI (Ενότητες 0–3)")
+            with st.spinner("Καλώ το μοντέλο..."):
+                try:
+                    report_text = generate_basic_report_with_openai(payload)
+                except Exception as e:
+                    report_text = f"Σφάλμα: {e}"
+            st.markdown("### 📜 Αναφορά (Ενότητες 0–3)")
+            st.write(report_text)
+            pdf_buffer = create_pdf(payload, report_text)
+            st.download_button("📄 Λήψη Βασικής Αναφοράς σε PDF", data=pdf_buffer,
+                file_name=f"basic_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf")
+
+        if talents_button:
+            st.subheader("🤖 Αναφορά Ενότητας 4 με OpenAI")
+            with st.spinner("Καλώ το μοντέλο..."):
+                try:
+                    report_text = generate_section4_report_with_openai(payload)
+                except Exception as e:
+                    report_text = f"Σφάλμα: {e}"
+            st.markdown("### 📜 Ενότητα 4 – Ταλέντα")
+            st.write(report_text)
+            pdf_buffer = create_pdf(payload, report_text)
+            st.download_button("📄 Λήψη Ενότητας 4 σε PDF", data=pdf_buffer,
+                file_name=f"section4_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf")
+
+        if aspects_button:
+            st.subheader("🤖 Αναφορά Ενότητας 5 – Όψεις με OpenAI")
+            with st.spinner("Καλώ το μοντέλο..."):
+                try:
+                    report_text = generate_section5_aspects_with_openai(payload)
+                except Exception as e:
+                    report_text = f"Σφάλμα: {e}"
+            st.markdown("### 📜 Ενότητα 5 – Όψεις")
+            st.write(report_text)
+            pdf_buffer = create_pdf(payload, report_text)
+            st.download_button("📄 Λήψη Ενότητας 5 σε PDF", data=pdf_buffer,
+                file_name=f"section5_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf")
+
+        if per_aspect_button:
+            st.subheader("🔍 Ερμηνεία Κάθε Όψης Ξεχωριστά (με πλήρες context)")
+            st.markdown("**Κάθε όψη θα αναλυθεί μεμονωμένα με βάση ολόκληρο το χάρτη.**")
+            
+            if not aspects:
+                st.warning("⚠️ Δεν υπάρχουν όψεις προς ανάλυση.")
+            else:
+                with st.spinner(f"Αναλύω {len(aspects)} όψεις... Αυτό μπορεί να πάρει λίγο χρόνο."):
+                    try:
+                        report_text = generate_all_aspects_separately(payload)
+                    except Exception as e:
+                        report_text = f"Σφάλμα: {e}"
+                
+                st.markdown("### 📜 Αναλυτική Ερμηνεία Όλων των Όψεων")
+                st.write(report_text)
+                pdf_buffer = create_pdf(payload, report_text)
+                st.download_button("📄 Λήψη Αναλυτικών Όψεων σε PDF", data=pdf_buffer,
+                    file_name=f"per_aspect_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf")
+
+        if full_button:
+            st.subheader("🤖 Πλήρης Αναφορά με OpenAI (Όλες οι Ενότητες)")
+            with st.spinner("Καλώ το μοντέλο 3 φορές για ολοκληρωμένη αναφορά... Μπορεί να πάρει 1-2 λεπτά."):
+                try:
+                    report_text = generate_full_report_with_openai(payload)
+                except Exception as e:
+                    report_text = f"Σφάλμα: {e}"
+            st.markdown("### 📜 Πλήρης Αναφορά Γενέθλιου Χάρτη")
+            st.write(report_text)
+            st.markdown("---")
+            pdf_buffer = create_pdf(payload, report_text)
+            st.download_button("📄 Λήψη Πλήρους Αναφοράς σε PDF", data=pdf_buffer,
+                file_name=f"full_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf")
+            st.success("✅ Πλήρης αναφορά ολοκληρώθηκε! Μπορείς να την κατεβάσεις ως PDF.")
+
+    st.markdown("---")
+    if st.button("🔄 Επανεκκίνηση (μηδενισμός όλων των δεδομένων)"):
+        st.session_state.reset_counter += 1
+        st.rerun()
+
+
+if __name__ == "__main__":
+    main()
