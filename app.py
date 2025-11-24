@@ -59,6 +59,17 @@ ASPECT_OPTIONS = [
 ]
 
 
+def get_neighboring_signs(sign_gr: str):
+    """Return [previous_sign, same_sign, next_sign] for a given Greek sign name."""
+    if sign_gr not in SIGNS_GR_LIST:
+        # Fallback: return the first three signs (should not normally happen)
+        return SIGNS_GR_LIST[:3]
+    idx = SIGNS_GR_LIST.index(sign_gr)
+    prev_sign = SIGNS_GR_LIST[(idx - 1) % len(SIGNS_GR_LIST)]
+    next_sign = SIGNS_GR_LIST[(idx + 1) % len(SIGNS_GR_LIST)]
+    return [prev_sign, sign_gr, next_sign]
+
+
 # ============ UTILITIES ============
 def get_openai_client() -> Optional[OpenAI]:
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -489,6 +500,7 @@ def main():
     house_planets_map = {}
     cols_h2 = st.columns(4)
 
+    # Επιλογή ΠΟΙΟΙ πλανήτες βρίσκονται σε κάθε οίκο
     for i in range(1, 13):
         col = cols_h2[(i - 1) % 4]
         with col:
@@ -498,15 +510,55 @@ def main():
                     already_selected.extend(house_planets_map[prev_house])
 
             available_planets = [p for p in planet_names_gr if p not in already_selected]
-            selected_planets_gr = st.multiselect(f"Πλανήτες στον Οίκο {i}", available_planets,
-                key=f"house_planets_{i}_{st.session_state.reset_counter}")
+            selected_planets_gr = st.multiselect(
+                f"Πλανήτες στον Οίκο {i}",
+                available_planets,
+                key=f"house_planets_{i}_{st.session_state.reset_counter}",
+            )
         house_planets_map[i] = selected_planets_gr
 
+    # Αναστροφή: από οίκο -> λίστα πλανητών, σε πλανήτη -> οίκος
     planet_house_map = {}
     for house_num, planets_gr_list in house_planets_map.items():
         for gr_name in planets_gr_list:
             en_name = next(en for (gr, en) in PLANETS if gr == gr_name)
             planet_house_map[en_name] = house_num
+
+    # Επιλογή ΖΩΔΙΟΥ για κάθε πλανήτη μέσα στον οίκο του (προηγούμενο / ίδιο / επόμενο)
+    st.markdown("#### Ζώδιο κάθε πλανήτη μέσα στον οίκο του")
+    st.markdown(
+        "Για κάθε πλανήτη που τοποθέτησες σε έναν οίκο, διάλεξε σε ποιο από τα τρία πιθανά ζώδια βρίσκεται "
+        "(προηγούμενο, ίδιο ή επόμενο από το ζώδιο της ακμής του οίκου)."
+    )
+
+    planet_sign_map = {}
+    for gr_name, en_name in [(gr, en) for (gr, en) in PLANETS if en in planet_house_map]:
+        house_num = planet_house_map[en_name]
+        cusp_sign_gr = houses_signs_gr.get(house_num, "---")
+        label = f"Ζώδιο για {gr_name} στον Οίκο {house_num}"
+
+        if cusp_sign_gr in SIGNS_GR_LIST:
+            prev_sign, mid_sign, next_sign = get_neighboring_signs(cusp_sign_gr)
+            options = [prev_sign, mid_sign, next_sign]
+            default_index = 1  # προεπιλογή: ίδιο ζώδιο με την ακμή του οίκου
+        else:
+            options = SIGNS_WITH_EMPTY
+            default_index = 0
+
+        selected_sign_gr = st.selectbox(
+            label,
+            options,
+            index=default_index,
+            key=f"planet_sign_{en_name}_house_{house_num}_{st.session_state.reset_counter}",
+        )
+
+        if selected_sign_gr in SIGNS_GR_TO_EN:
+            planet_sign_map[en_name] = {
+                "sign_gr": selected_sign_gr,
+                "sign": SIGNS_GR_TO_EN[selected_sign_gr],
+            }
+        else:
+            planet_sign_map[en_name] = {"sign_gr": None, "sign": None}
 
     # ============ SECTION 3: ASPECTS (WITH EXPANDERS & NUMBERED) ============
     st.header("3. Ενότητα 3 – Όψεις ανάμεσα σε πλανήτες")
@@ -588,7 +640,16 @@ def main():
         planets_in_houses = []
         for en_name, house_num in planet_house_map.items():
             gr_name = next(gr for gr, en in PLANETS if en == en_name)
-            planets_in_houses.append({"planet": en_name, "planet_gr": gr_name, "house": house_num})
+            sign_info = planet_sign_map.get(en_name, {})
+            planets_in_houses.append(
+                {
+                    "planet": en_name,
+                    "planet_gr": gr_name,
+                    "house": house_num,
+                    "sign_gr": sign_info.get("sign_gr"),
+                    "sign": sign_info.get("sign"),
+                }
+            )
 
         aspects = []
         for (p1, p2), label in aspects_selected_ui.items():
