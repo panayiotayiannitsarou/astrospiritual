@@ -58,6 +58,14 @@ ASPECT_OPTIONS = [
     ("🔵 ⚹ Εξάγωνο (60°)", "sextile"),
 ]
 
+PREDEFINED_QUESTIONS = {
+    "talents": "🌟 Ταλέντα: Ποια είναι τα φυσικά ταλέντα και οι δυνατότητές μου σύμφωνα με τον χάρτη;",
+    "interests": "❤️ Ενδιαφέροντα: Σε ποιους τομείς ζωής ή δραστηριότητες θα αισθανθώ ικανοποίηση και εκπλήρωση;",
+    "healing": "🌿 Θεραπεία: Τι χρειάζομαι για εσωτερική ισορροπία και ψυχική ανάπτυξη;",
+    "challenges": "⚡ Αδυναμίες/Αποφυγή: Ποιες προκλήσεις με περιμένουν και τι πρέπει να προσέξω;",
+    "careers": "💼 Επαγγελματικός Προσανατολισμός: Ποια 5-7 συγκεκριμένα επαγγέλματα ταιριάζουν στις δυνατότητές και τα ταλέντα μου; (π.χ. Ψυχολόγος, Αρχιτέκτονας, Δημοσιογράφος, κλπ.)",
+}
+
 
 def get_neighboring_signs(sign_gr: str):
     """Return [previous_sign, same_sign, next_sign] for a given Greek sign name."""
@@ -118,7 +126,7 @@ def validate_chart_data(payload: dict) -> List[str]:
     return warnings
 
 
-# ============ OPENAI FUNCTION (CACHED) ============
+# ============ OPENAI FUNCTIONS (CACHED) ============
 @st.cache_data(show_spinner=False)
 def generate_basic_report_cached(payload_hash: str, payload: dict) -> str:
     return generate_basic_report_with_openai(payload)
@@ -196,6 +204,61 @@ def generate_basic_report_with_openai(payload: dict) -> str:
     return response.choices[0].message.content
 
 
+@st.cache_data(show_spinner=False)
+def generate_custom_analysis_cached(payload_hash: str, questions_hash: str, report_hash: str, 
+                                   payload: dict, questions: List[str], basic_report: str) -> str:
+    return generate_custom_analysis_with_openai(payload, questions, basic_report)
+
+
+def generate_custom_analysis_with_openai(payload: dict, questions: List[str], basic_report: str) -> str:
+    client = get_openai_client()
+    if client is None:
+        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον."
+
+    questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)])
+    
+    system_prompt = """Είσαι έμπειρη αστρολόγος.
+Λαμβάνεις:
+- Ένα JSON με γενέθλιο χάρτη (basic_info, houses, planets_in_houses, aspects)
+- ΜΙΑ ΑΝΑΛΥΤΙΚΗ ΑΝΑΦΟΡΑ που έχει ήδη δημιουργηθεί για αυτό το άτομο
+- Συγκεκριμένες ερωτήσεις από τον χρήστη
+
+ΚΡΙΣΙΜΟ: Η ανάλυσή σου ΠΡΕΠΕΙ να στηρίζεται στην υπάρχουσα αναφορά. Διάβασέ την προσεκτικά και χρησιμοποίησέ την ως βάση.
+
+ΟΔΗΓΙΕΣ:
+- Απάντησε ΜΟΝΟ στις ερωτήσεις που σου δίνονται
+- ΧΡΗΣΙΜΟΠΟΙΗΣΕ τα συμπεράσματα από την υπάρχουσα αναφορά
+- Αναφέρσου σε συγκεκριμένα σημεία από την αναφορά (π.χ. "Όπως είδαμε στην ανάλυση...")
+- Για την ερώτηση επαγγελμάτων: πρότεινε 5-7 ΣΥΓΚΕΚΡΙΜΕΝΑ επαγγέλματα (όχι γενικόλογα) με σύντομη αιτιολογία για το καθένα
+- Γράψε σε απλή, ζεστή, ενδυναμωτική ελληνική γλώσσα
+- Για κάθε ερώτηση, γράψε 2-4 παραγράφους με συγκεκριμένα παραδείγματα
+- Όχι μοιρολατρικό ύφος - εστίασε σε δυνατότητες και εξέλιξη"""
+
+    user_prompt = f"""ΥΠΑΡΧΟΥΣΑ ΑΝΑΛΥΤΙΚΗ ΑΝΑΦΟΡΑ ΓΙΑ ΤΟ ΑΤΟΜΟ:
+{basic_report}
+
+---
+
+ΔΕΔΟΜΕΝΑ ΧΑΡΤΗ (για αναφορά):
+{json.dumps(payload, ensure_ascii=False, indent=2)}
+
+---
+
+ΕΡΩΤΗΣΕΙΣ ΠΡΟΣ ΑΠΑΝΤΗΣΗ:
+{questions_text}
+
+Να απαντήσεις με βάση την υπάρχουσα αναφορά και τον χάρτη. Κάνε αναφορές σε συγκεκριμένα σημεία από την ανάλυση."""
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    return response.choices[0].message.content
+
+
 # ============ PDF GENERATION ============
 def create_pdf(payload: dict, report_text: str) -> BytesIO:
     buffer = BytesIO()
@@ -228,6 +291,14 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
 
     basic = payload.get("basic_info", {})
     story.append(Paragraph("Βασικά Στοιχεία", heading_style))
+    
+    full_name = basic.get("full_name", "")
+    gender = basic.get("gender", "")
+    if full_name:
+        story.append(Paragraph(f"Ονοματεπώνυμο: {full_name}", body_style))
+    if gender:
+        story.append(Paragraph(f"Φύλο: {gender}", body_style))
+    
     story.append(Paragraph(f"Ζώδιο Ηλίου: {basic.get('sun_sign_gr', 'N/A')}", body_style))
     story.append(Paragraph(f"Ωροσκόπος: {basic.get('asc_sign_gr', 'N/A')}", body_style))
     story.append(Paragraph(f"Ζώδιο Σελήνης: {basic.get('moon_sign_gr', 'N/A')}", body_style))
@@ -255,11 +326,32 @@ def main():
     - ✅ **Caching** για γρήγορη επανάληψη
     - ✅ **Validation** warnings για ελλιπή δεδομένα
     - ✅ **Αριθμημένες όψεις** στο UI
-    - ✅ **1 κουμπί** – Πλήρης αναφορά με Ενότητες 0-3
+    - ✅ **2 κουμπιά**: Βασική Αναφορά & Εξειδικευμένες Ερωτήσεις (με βάση την αναφορά)
     """)
 
     if "reset_counter" not in st.session_state:
         st.session_state.reset_counter = 0
+    if "basic_report" not in st.session_state:
+        st.session_state.basic_report = None
+    if "payload" not in st.session_state:
+        st.session_state.payload = None
+
+    # ============ SECTION -1: NAME & GENDER ============
+    st.header("📝 Στοιχεία Ατόμου")
+    col_name, col_gender = st.columns([2, 1])
+    with col_name:
+        full_name = st.text_input(
+            "Ονοματεπώνυμο",
+            key=f"full_name_{st.session_state.reset_counter}",
+            placeholder="π.χ. Μαρία Παπαδοπούλου"
+        )
+    with col_gender:
+        gender = st.radio(
+            "Φύλο",
+            options=["Άνδρας", "Γυναίκα"],
+            key=f"gender_{st.session_state.reset_counter}",
+            horizontal=True
+        )
 
     # ============ SECTION 0: BASIC INFO ============
     st.header("0. Βασικά στοιχεία χάρτη")
@@ -374,7 +466,7 @@ def main():
             
             for j in range(i + 1, len(PLANETS)):
                 gr2, en2 = PLANETS[j]
-                label_text = f"**{pair_index}.** {gr1} — {gr2}"
+                label_text = f"**{pair_index}.** {gr1} – {gr2}"
                 key = f"aspect_{en1}_{en2}_{st.session_state.reset_counter}"
                 
                 choice = st.selectbox(
@@ -385,22 +477,33 @@ def main():
                 aspects_selected_ui[(en1, en2)] = choice
                 pair_index += 1
 
-    # ============ ACTION BUTTON ============
+    # ============ ACTION BUTTONS ============
     st.markdown("---")
     st.subheader("📊 Δημιουργία Αναφοράς")
     
-    generate_button = st.button("📝 Δημιουργία Βασικής Αναφοράς (Ενότητες 0–3)", type="primary")
+    col_btn1, col_btn2 = st.columns(2)
+    
+    with col_btn1:
+        generate_basic = st.button("🔍 Δημιουργία Βασικής Αναφοράς (Ενότητες 0–3)", type="primary", use_container_width=True)
+    
+    with col_btn2:
+        generate_questions = st.button("💎 Ερωτήσεις (βασισμένες στην αναφορά)", type="secondary", use_container_width=True)
 
-    # ============ PROCESSING ============
-    if generate_button:
+    # ============ BASIC REPORT PROCESSING ============
+    if generate_basic:
         if sun_sign_gr == "---" or asc_sign_gr == "---" or moon_sign_gr == "---":
             st.error("⚠️ Παρακαλώ συμπλήρωσε Ζώδιο Ηλίου, Ωροσκόπο και Ζώδιο Σελήνης!")
             return
 
         basic_info = {
-            "sun_sign_gr": sun_sign_gr, "sun_sign": SIGNS_GR_TO_EN[sun_sign_gr],
-            "asc_sign_gr": asc_sign_gr, "asc_sign": SIGNS_GR_TO_EN[asc_sign_gr],
-            "moon_sign_gr": moon_sign_gr, "moon_sign": SIGNS_GR_TO_EN[moon_sign_gr],
+            "full_name": full_name.strip(),
+            "gender": gender,
+            "sun_sign_gr": sun_sign_gr, 
+            "sun_sign": SIGNS_GR_TO_EN[sun_sign_gr],
+            "asc_sign_gr": asc_sign_gr, 
+            "asc_sign": SIGNS_GR_TO_EN[asc_sign_gr],
+            "moon_sign_gr": moon_sign_gr, 
+            "moon_sign": SIGNS_GR_TO_EN[moon_sign_gr],
         }
 
         houses = []
@@ -465,6 +568,8 @@ def main():
         with st.spinner("⏳ Καλώ το μοντέλο... (με caching)"):
             try:
                 report_text = generate_basic_report_cached(payload_hash, payload)
+                st.session_state.basic_report = report_text
+                st.session_state.payload = payload
             except Exception as e:
                 report_text = f"Σφάλμα: {e}"
         
@@ -481,9 +586,60 @@ def main():
         )
         st.success("✅ Η αναφορά ολοκληρώθηκε!")
 
+    # ============ QUESTIONS PROCESSING ============
+    if generate_questions:
+        if st.session_state.basic_report is None:
+            st.error("⚠️ Πρέπει πρώτα να δημιουργήσεις τη Βασική Αναφορά!")
+            st.info("👆 Πάτησε το κουμπί 'Δημιουργία Βασικής Αναφοράς' πρώτα.")
+            return
+        
+        st.subheader("💎 Επιλογή Ερωτήσεων")
+        st.markdown("Διάλεξε τις ερωτήσεις που σε ενδιαφέρουν:")
+        
+        selected_questions = []
+        for key, question in PREDEFINED_QUESTIONS.items():
+            if st.checkbox(question, key=f"q_{key}_{st.session_state.reset_counter}"):
+                selected_questions.append(question)
+        
+        if not selected_questions:
+            st.warning("⚠️ Παρακαλώ επίλεξε τουλάχιστον μία ερώτηση!")
+            return
+        
+        st.markdown("---")
+        st.markdown("**Επιλεγμένες ερωτήσεις:**")
+        for i, q in enumerate(selected_questions, 1):
+            st.markdown(f"{i}. {q}")
+        
+        questions_hash = hashlib.sha256(
+            json.dumps(selected_questions, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
+        report_hash = hashlib.sha256(st.session_state.basic_report.encode()).hexdigest()
+        payload_hash = compute_payload_hash(st.session_state.payload)
+        
+        st.markdown("---")
+        st.subheader("🤖 Εξειδικευμένη Ανάλυση")
+        with st.spinner("⏳ Αναλύω με βάση την αναφορά σου..."):
+            try:
+                analysis_text = generate_custom_analysis_cached(
+                    payload_hash, 
+                    questions_hash, 
+                    report_hash,
+                    st.session_state.payload, 
+                    selected_questions,
+                    st.session_state.basic_report
+                )
+            except Exception as e:
+                analysis_text = f"Σφάλμα: {e}"
+        
+        st.markdown("### 💫 Απαντήσεις")
+        st.write(analysis_text)
+        st.success("✅ Η ανάλυση ολοκληρώθηκε!")
+
     st.markdown("---")
     if st.button("🔄 Επανεκκίνηση (μηδενισμός όλων)"):
         st.session_state.reset_counter += 1
+        st.session_state.basic_report = None
+        st.session_state.payload = None
         st.rerun()
     
     st.caption("💡 **Tip:** Το caching εξοικονομεί χρόνο & κόστος στις επαναλήψεις.")
