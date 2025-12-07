@@ -1,4 +1,29 @@
-import os
+    # ============ QUESTIONS PROCESSING ============
+    if generate_questions:
+        if st.session_state.basic_report is None:
+            st.error("⚠️ Πρέπει πρώτα να δημιουργήσεις τη Βασική Αναφορά!")
+            st.info("👆 Πάτησε το κουμπί 'Δημιουργία Βασικής Αναφοράς' πρώτα.")
+            return
+        
+        st.subheader("💎 Επιλογή Ερωτήσεων")
+        st.markdown("**Α) Προκαθορισμένες Ερωτήσεις** - Διάλεξε όσες σε ενδιαφέρουν:")
+        
+        selected_questions = []
+        for key, question in PREDEFINED_QUESTIONS.items():
+            if st.checkbox(question, key=f"q_{key}_{st.session_state.reset_counter}"):
+                selected_questions.append(question)
+        
+        st.markdown("---")
+        st.markdown("**Β) Προσαρμοσμένες Ερωτήσεις** - Γράψε τις δικές σου ερωτήσεις (μία ανά γραμμή):")
+        custom_questions_text = st.text_area(
+            "Οι ερωτήσεις σου:",
+            height=150,
+            key=f"custom_q_{st.session_state.reset_counter}",
+            placeholder="Παράδειγμα:\nΠώς επηρεάζει ο    # ============ QUESTIONS PROCESSING ============
+    if generate_questions:
+        if st.session_state.basic_report is None:
+            st.error("⚠️ Πρέπει πρώτα να δημιουργήσεις τη Βασική Αναφορά!")
+            st.info("👆 Πάτησε τοimport os
 import json
 import hashlib
 from io import BytesIO
@@ -67,6 +92,21 @@ PREDEFINED_QUESTIONS = {
     "avoid_careers": "🚫 Επαγγέλματα προς Αποφυγή: Ποια επαγγέλματα ή τομείς εργασίας δεν ταιριάζουν στη φύση μου και γιατί να τα αποφύγω; Να αναφερθούν συγκεκριμένα παραδείγματα.",
 }
 
+HOUSE_THEMES = {
+    1: "εγώ & σώμα",
+    2: "χρήματα & αξίες",
+    3: "επικοινωνία & μάθηση",
+    4: "σπίτι & οικογένεια",
+    5: "έρωτας & παιδιά",
+    6: "δουλειά & υγεία",
+    7: "σχέσεις & γάμος",
+    8: "βαθιά οικειότητα & κοινά χρήματα",
+    9: "ταξίδια & ανώτερες σπουδές",
+    10: "καριέρα & κοινωνική εικόνα",
+    11: "φίλοι & όραμα",
+    12: "ασυνείδητο & θεραπεία",
+}
+
 
 def get_neighboring_signs(sign_gr: str):
     """Return [previous_sign, same_sign, next_sign] for a given Greek sign name."""
@@ -121,8 +161,6 @@ def validate_chart_data(payload: dict) -> List[str]:
     aspects = payload.get("aspects", [])
     if len(aspects) == 0:
         warnings.append("⚠️ Καμία όψη επιλεγμένη")
-    elif len(aspects) < 5:
-        warnings.append(f"ℹ️ Μόνο {len(aspects)} όψεις (συνιστώνται τουλάχιστον 5-10)")
     
     return warnings
 
@@ -206,9 +244,110 @@ def generate_basic_report_with_openai(payload: dict) -> str:
 
 
 @st.cache_data(show_spinner=False)
-def generate_custom_analysis_cached(payload_hash: str, questions_hash: str, report_hash: str, 
-                                   payload: dict, questions: List[str], basic_report: str) -> str:
-    return generate_custom_analysis_with_openai(payload, questions, basic_report)
+def generate_houses_analysis_cached(payload_hash: str, payload: dict) -> str:
+    return generate_houses_analysis_with_openai(payload)
+
+
+def generate_houses_analysis_with_openai(payload: dict) -> str:
+    client = get_openai_client()
+    if client is None:
+        return "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον."
+
+    # Prepare house data for each house
+    houses_data = []
+    for house_num in range(1, 13):
+        house_info = next((h for h in payload.get("houses", []) if h["house"] == house_num), None)
+        if not house_info:
+            continue
+        
+        # Get planets in this house
+        planets_in_house = [
+            {"planet": p["planet"], "sign": p["sign"]}
+            for p in payload.get("planets_in_houses", [])
+            if p["house"] == house_num and p["sign"]
+        ]
+        
+        # Get ruler position
+        ruler = house_info.get("ruler")
+        ruler_gr = house_info.get("ruler_gr")
+        ruler_planet_info = next(
+            (p for p in payload.get("planets_in_houses", []) if p["planet"] == ruler),
+            None
+        )
+        if ruler_planet_info:
+            ruler_position = f"{ruler_gr} στον {ruler_planet_info['sign']} στον {ruler_planet_info['house']}ο οίκο"
+        else:
+            ruler_position = f"{ruler_gr} (θέση μη καταγεγραμμένη)"
+        
+        # Get major aspects affecting this house
+        major_aspects = []
+        for aspect in payload.get("aspects", []):
+            p1, p2 = aspect["p1"], aspect["p2"]
+            # Include if ruler or any planet in house is involved
+            planets_to_check = [ruler] + [p["planet"] for p in planets_in_house]
+            if p1 in planets_to_check or p2 in planets_to_check:
+                major_aspects.append({
+                    "from": aspect["p1"],
+                    "to": aspect["p2"],
+                    "type": aspect["aspect"],
+                    "orb": 2  # Default orb
+                })
+        
+        houses_data.append({
+            "house_number": house_num,
+            "house_theme": HOUSE_THEMES.get(house_num, ""),
+            "house_sign": house_info["sign"],
+            "house_ruler_planet": ruler,
+            "house_ruler_position": ruler_position,
+            "planets_in_house": planets_in_house,
+            "major_aspects": major_aspects,
+        })
+
+    system_prompt = """MASTER PROMPT – Ερμηνεία Οίκων (1–12)
+
+Ρόλος: Είσαι μια έμπειρη, σύγχρονη ψυχολογική αστρολόγος.
+Η δουλειά σου είναι να εξηγείς έναν συγκεκριμένο οίκο του γενέθλιου χάρτη σε μία παράγραφο, ζεστά, πρακτικά και ενδυναμωτικά, χωρίς φόβο και μοιρολατρία.
+
+Τι πρέπει να κάνεις:
+1. Χρησιμοποίησε το house_theme και το house_number για να ξεκινήσεις με 1–2 προτάσεις που εξηγούν σε ποιο πεδίο της ζωής αναφέρεται ο οίκος.
+2. Με βάση το house_sign και τον house_ruler_planet μαζί με το house_ruler_position, περιέγραψε πώς εκφράζεται η ενέργεια αυτού του οίκου.
+3. Αν υπάρχουν planets_in_house, ενσωμάτωσε τους στο κείμενο: εξήγησε τι χρώμα δίνει κάθε πλανήτης στα θέματα του οίκου. Μην κάνεις λίστα· πες το σαν ιστορία.
+4. Χρησιμοποίησε τις major_aspects για να δώσεις 2–4 συγκεκριμένα παραδείγματα για το πώς βιώνει το άτομο αυτόν τον οίκο στην πράξη.
+   - ΜΗΝ γράφεις τεχνική γλώσσα του τύπου «τετράγωνο Άρη–Κρόνου». Μετέφρασε την ουσία της όψης σε απλή ψυχολογική/πρακτική γλώσσα.
+   - Αρμονικές όψεις (trine, sextile) = φυσικές διευκολύνσεις, ταλέντα, υποστήριξη.
+   - Δύσκολες όψεις (square, opposition) = προκλήσεις ή εσωτερικές συγκρούσεις που βοηθούν το άτομο να ωριμάσει.
+5. Σύνδεσε πάντα ό,τι περιγράφεις με το πραγματικό θέμα του οίκου.
+6. Κλείσε την παράγραφο με 1–2 προτάσεις θεραπευτικής/εξελικτικής κατεύθυνσης.
+
+Στυλ κειμένου:
+- Γράψε σε απλή, καθημερινή ελληνική, σαν να μιλάς σε φίλη που δεν ξέρει αστρολογία.
+- Απόφυγε τεχνικούς όρους. Αν χρειαστεί, εξήγησε το ψυχολογικό νόημα.
+- Η απάντηση πρέπει να είναι μία ενιαία παράγραφος, 5–8 προτάσεων, χωρίς τίτλους, bullets ή λίστες.
+- Ύφος ζεστό, ενθαρρυντικό, με κατανόηση. Μην γράφεις τρομακτικά ή απόλυτες φράσεις.
+- Στόχος: το άτομο να καταλάβει καλύτερα τον εαυτό του και να νιώσει ότι έχει επιλογές και δύναμη."""
+
+    user_prompt = f"""Θα σου δώσω δεδομένα για ΟΛΟΥΣ τους 12 οίκους. Για κάθε οίκο, γράψε ΜΙΑ παράγραφο (5-8 προτάσεις) σύμφωνα με το MASTER PROMPT.
+
+Δομή απάντησης:
+ΟΙΚΟΣ 1
+[η παράγραφός σου]
+
+ΟΙΚΟΣ 2
+[η παράγραφός σου]
+
+... και ούτω καθεξής για όλους τους 12 οίκους.
+
+Δεδομένα:
+{json.dumps(houses_data, ensure_ascii=False, indent=2)}"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    return response.choices[0].message.content
 
 
 def generate_custom_analysis_with_openai(payload: dict, questions: List[str], basic_report: str) -> str:
@@ -261,7 +400,7 @@ def generate_custom_analysis_with_openai(payload: dict, questions: List[str], ba
 
 
 # ============ PDF GENERATION ============
-def create_pdf(payload: dict, report_text: str) -> BytesIO:
+def create_pdf(payload: dict, basic_report: str, questions_report: Optional[str] = None, houses_report: Optional[str] = None) -> BytesIO:
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm)
     story = []
@@ -305,12 +444,33 @@ def create_pdf(payload: dict, report_text: str) -> BytesIO:
     story.append(Paragraph(f"Ζώδιο Σελήνης: {basic.get('moon_sign_gr', 'N/A')}", body_style))
     story.append(Spacer(1, 1*cm))
 
-    story.append(Paragraph("Αναλυτική Αναφορά", heading_style))
-    for para in report_text.split('\n\n'):
+    # Basic Report
+    story.append(Paragraph("Βασική Αναφορά (Ενότητες 0-3)", heading_style))
+    for para in basic_report.split('\n\n'):
         if para.strip():
             safe_para = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             story.append(Paragraph(safe_para, body_style))
             story.append(Spacer(1, 0.3*cm))
+    
+    # Questions Report (if exists)
+    if questions_report:
+        story.append(Spacer(1, 1*cm))
+        story.append(Paragraph("Απαντήσεις σε Ερωτήσεις", heading_style))
+        for para in questions_report.split('\n\n'):
+            if para.strip():
+                safe_para = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                story.append(Paragraph(safe_para, body_style))
+                story.append(Spacer(1, 0.3*cm))
+    
+    # Houses Report (if exists)
+    if houses_report:
+        story.append(Spacer(1, 1*cm))
+        story.append(Paragraph("Ψυχολογική Ανάλυση Οίκων (1-12)", heading_style))
+        for para in houses_report.split('\n\n'):
+            if para.strip():
+                safe_para = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                story.append(Paragraph(safe_para, body_style))
+                story.append(Spacer(1, 0.3*cm))
 
     doc.build(story)
     buffer.seek(0)
@@ -336,6 +496,10 @@ def main():
         st.session_state.basic_report = None
     if "payload" not in st.session_state:
         st.session_state.payload = None
+    if "questions_report" not in st.session_state:
+        st.session_state.questions_report = None
+    if "houses_report" not in st.session_state:
+        st.session_state.houses_report = None
 
     # ============ SECTION -1: NAME & GENDER ============
     st.header("📝 Στοιχεία Ατόμου")
@@ -482,13 +646,16 @@ def main():
     st.markdown("---")
     st.subheader("📊 Δημιουργία Αναφοράς")
     
-    col_btn1, col_btn2 = st.columns(2)
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
     
     with col_btn1:
-        generate_basic = st.button("🔍 Δημιουργία Βασικής Αναφοράς (Ενότητες 0–3)", type="primary", use_container_width=True)
+        generate_basic = st.button("🔍 Βασική Αναφορά (Ενότητες 0–3)", type="primary", use_container_width=True)
     
     with col_btn2:
-        generate_questions = st.button("💎 Ερωτήσεις (βασισμένες στην αναφορά)", type="secondary", use_container_width=True)
+        generate_questions = st.button("💎 Ερωτήσεις", type="secondary", use_container_width=True)
+    
+    with col_btn3:
+        generate_houses = st.button("🏠 Ανάλυση Οίκων (1-12)", type="secondary", use_container_width=True)
 
     # ============ BASIC REPORT PROCESSING ============
     if generate_basic:
@@ -578,14 +745,34 @@ def main():
         st.write(report_text)
         st.markdown("---")
         
-        pdf_buffer = create_pdf(payload, report_text)
-        st.download_button(
-            "📄 Λήψη Αναφοράς σε PDF", 
-            data=pdf_buffer,
-            file_name=f"astro_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-            mime="application/pdf"
-        )
         st.success("✅ Η αναφορά ολοκληρώθηκε!")
+
+    # ============ MEGA PDF DOWNLOAD BUTTON ============
+    if st.session_state.basic_report:
+        st.markdown("---")
+        st.subheader("📄 Λήψη Πλήρους Αναφοράς")
+        
+        sections_included = ["✅ Βασική Αναφορά"]
+        if st.session_state.questions_report:
+            sections_included.append("✅ Ερωτήσεις")
+        if st.session_state.houses_report:
+            sections_included.append("✅ Ανάλυση Οίκων")
+        
+        st.markdown(f"**Το PDF θα περιλαμβάνει:** {' | '.join(sections_included)}")
+        
+        pdf_buffer = create_pdf(
+            st.session_state.payload,
+            st.session_state.basic_report,
+            st.session_state.questions_report,
+            st.session_state.houses_report
+        )
+        st.download_button(
+            "📥 Κατέβασμα Πλήρους Αναφοράς (PDF)", 
+            data=pdf_buffer,
+            file_name=f"astro_full_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 
     # ============ QUESTIONS PROCESSING ============
     if generate_questions:
@@ -595,19 +782,33 @@ def main():
             return
         
         st.subheader("💎 Επιλογή Ερωτήσεων")
-        st.markdown("Διάλεξε τις ερωτήσεις που σε ενδιαφέρουν:")
         
+        st.markdown("**Α) Προκαθορισμένες Ερωτήσεις** - Διάλεξε όσες σε ενδιαφέρουν:")
         selected_questions = []
         for key, question in PREDEFINED_QUESTIONS.items():
             if st.checkbox(question, key=f"q_{key}_{st.session_state.reset_counter}"):
                 selected_questions.append(question)
         
+        st.markdown("---")
+        st.markdown("**Β) Προσαρμοσμένες Ερωτήσεις** - Γράψε τις δικές σου ερωτήσεις (μία ανά γραμμή):")
+        custom_questions_text = st.text_area(
+            "Οι δικές σου ερωτήσεις:",
+            height=150,
+            key=f"custom_q_{st.session_state.reset_counter}",
+            placeholder="Παράδειγμα:\nΠώς επηρεάζει ο Κρόνος την καριέρα μου;\nΤι σημαίνει ο Άρης στον 7ο οίκο για τις σχέσεις μου;\nΠοια είναι η σχέση μου με το χρήμα;"
+        )
+        
+        # Parse custom questions
+        if custom_questions_text.strip():
+            custom_lines = [line.strip() for line in custom_questions_text.strip().split('\n') if line.strip()]
+            selected_questions.extend(custom_lines)
+        
         if not selected_questions:
-            st.warning("⚠️ Παρακαλώ επίλεξε τουλάχιστον μία ερώτηση!")
+            st.info("💡 Δεν επιλέχθηκε καμία ερώτηση. Επίλεξε από τις προκαθορισμένες ή γράψε δικές σου.")
             return
         
         st.markdown("---")
-        st.markdown("**Επιλεγμένες ερωτήσεις:**")
+        st.markdown(f"**Σύνολο Ερωτήσεων: {len(selected_questions)}**")
         for i, q in enumerate(selected_questions, 1):
             st.markdown(f"{i}. {q}")
         
@@ -634,13 +835,45 @@ def main():
         
         st.markdown("### 💫 Απαντήσεις")
         st.write(analysis_text)
+        
+        # Save to session state
+        st.session_state.questions_report = analysis_text
+        
         st.success("✅ Η ανάλυση ολοκληρώθηκε!")
+
+    # ============ HOUSES ANALYSIS PROCESSING ============
+    if generate_houses:
+        if st.session_state.basic_report is None:
+            st.error("⚠️ Πρέπει πρώτα να δημιουργήσεις τη Βασική Αναφορά!")
+            st.info("👆 Πάτησε το κουμπί 'Βασική Αναφορά' πρώτα.")
+            return
+        
+        payload_hash = compute_payload_hash(st.session_state.payload)
+        
+        st.subheader("🏠 Ψυχολογική Ανάλυση Οίκων (1-12)")
+        st.markdown("Εξειδικευμένη ανάλυση κάθε οίκου με βάση το MASTER PROMPT.")
+        
+        with st.spinner("⏳ Δημιουργώ εις βάθος ανάλυση για κάθε οίκο..."):
+            try:
+                houses_text = generate_houses_analysis_cached(payload_hash, st.session_state.payload)
+            except Exception as e:
+                houses_text = f"Σφάλμα: {e}"
+        
+        st.markdown("### 🏛️ Ανάλυση Οίκων")
+        st.write(houses_text)
+        
+        # Save to session state
+        st.session_state.houses_report = houses_text
+        
+        st.success("✅ Η ανάλυση των οίκων ολοκληρώθηκε!")
 
     st.markdown("---")
     if st.button("🔄 Επανεκκίνηση (μηδενισμός όλων)"):
         st.session_state.reset_counter += 1
         st.session_state.basic_report = None
         st.session_state.payload = None
+        st.session_state.questions_report = None
+        st.session_state.houses_report = None
         st.rerun()
     
     st.caption("💡 **Tip:** Το caching εξοικονομεί χρόνο & κόστος στις επαναλήψεις.")
