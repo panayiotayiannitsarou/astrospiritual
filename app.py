@@ -343,8 +343,7 @@ def generate_custom_analysis_with_openai(payload: dict, questions: List[str], ba
     if client is None:
         return "⚠️ Δεν βρέθηκε OPENAI_API_KEY στο περιβάλλον."
 
-    questions_text = "
-".join([f"{i+1}. {q}" for i, q in enumerate(questions)])
+    questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)])
 
     system_prompt = """Είσαι έμπειρη αστρολόγος.
 Λαμβάνεις:
@@ -784,15 +783,12 @@ def main():
             "Οι δικές σου ερωτήσεις:",
             height=150,
             key=f"custom_q_{st.session_state.reset_counter}",
-            placeholder="Παράδειγμα:
-Πώς επηρεάζει ο Κρόνος την καριέρα μου;
-Τι σημαίνει ο Άρης στον 7ο οίκο για τις σχέσεις μου;
-Ποια είναι η σχέση μου με το χρήμα;"
+            placeholder="Παράδειγμα:\nΠώς επηρεάζει ο Κρόνος την καριέρα μου;\nΤι σημαίνει ο Άρης στον 7ο οίκο για τις σχέσεις μου;\nΠοια είναι η σχέση μου με το χρήμα;"
         )
 
         # Parse custom questions
         if custom_questions_text.strip():
-            custom_lines = [line.strip() for line in custom_questions_text.strip().split('\n') if line.strip()]
+            custom_lines = [line.strip() for line in custom_questions_text.strip().splitlines() if line.strip()]
             selected_questions.extend(custom_lines)
 
         if not selected_questions:
