@@ -93,6 +93,43 @@ def get_neighboring_signs(sign_gr: str):
     return [prev_sign, sign_gr, next_sign]
 
 
+def format_degrees(input_str: str) -> str:
+    """
+    Auto-format degrees input to standard notation.
+    Examples:
+        "21 55 7" -> "21°55'07""
+        "21.55.7" -> "21°55'07""
+        "21 55" -> "21°55'00""
+        "21" -> "21°00'00""
+    """
+    if not input_str or not input_str.strip():
+        return ""
+    
+    # Remove existing symbols
+    cleaned = input_str.replace("°", " ").replace("'", " ").replace('"', " ").replace(".", " ")
+    parts = [p.strip() for p in cleaned.split() if p.strip()]
+    
+    if not parts:
+        return ""
+    
+    try:
+        degrees = int(parts[0]) if len(parts) > 0 else 0
+        minutes = int(parts[1]) if len(parts) > 1 else 0
+        seconds = int(parts[2]) if len(parts) > 2 else 0
+        
+        # Validate ranges
+        if not (0 <= degrees <= 29):
+            return input_str  # Return as-is if invalid
+        if not (0 <= minutes <= 59):
+            return input_str
+        if not (0 <= seconds <= 59):
+            return input_str
+        
+        return f"{degrees}°{minutes:02d}'{seconds:02d}\""
+    except (ValueError, IndexError):
+        return input_str  # Return as-is if can't parse
+
+
 # ============ UTILITIES ============
 def get_openai_client() -> Optional[OpenAI]:
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -587,13 +624,16 @@ def main():
             )
         
         with col3:
-            degrees = st.text_input(
+            degrees_raw = st.text_input(
                 f"Μοίρες {gr_name}",
                 value="",
-                placeholder="21°55'07\"",
+                placeholder="π.χ. 21 55 7",
+                help="Γράψε μόνο αριθμούς (π.χ. 21 55 7 ή 21.55.7)",
                 key=f"planet_{en_name}_degrees_{st.session_state.reset_counter}",
                 label_visibility="collapsed"
             )
+            # Auto-format the degrees
+            degrees = format_degrees(degrees_raw) if degrees_raw else ""
         
         with col4:
             house_num = st.selectbox(
