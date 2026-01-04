@@ -132,6 +132,15 @@ def validate_chart_data(payload: dict) -> List[str]:
             f"⚠️ Λείπουν πλανήτες: {', '.join(missing_gr)} "
             f"({len(placed_planet_names)}/{len(expected_planets)} τοποθετημένοι)"
         )
+    
+    # Check for missing degrees
+    planets_without_degrees = []
+    for p in planets_placed:
+        if not p.get("degrees", "").strip():
+            planets_without_degrees.append(p["planet_gr"])
+    
+    if planets_without_degrees:
+        warnings.append(f"⚠️ Λείπουν μοίρες για: {', '.join(planets_without_degrees)}")
 
     aspects = payload.get("aspects", [])
     if len(aspects) == 0:
@@ -167,6 +176,8 @@ def generate_basic_report_with_openai(payload: dict) -> str:
 2. ΕΝΟΤΗΤΑ 2 – Πλανήτες & κυβερνήτες σε οίκους
 - Για κάθε οίκο:
   • Αν έχει μέσα πλανήτες, γράψε ανάλυση για το πώς εκφράζονται αυτοί οι πλανήτες μέσα από τα θέματα του οίκου.
+    — Αναφέρε το ζώδιο και τις μοίρες του πλανήτη (π.χ. "Ήλιος στον Υδροχόο στις 21°55'")
+    — Αν ο πλανήτης είναι ανάδρομος (retrograde: true), ΣΗΜΕΙΩΣΕ ΤΟ και εξήγησε τι σημαίνει η ανάδρομη κίνηση για αυτόν τον πλανήτη (π.χ. "Ο Ερμής είναι ανάδρομος, πράγμα που υποδηλώνει...")
   • Αν δεν έχει πλανήτες, εξήγησε τον οίκο μέσω:
     — του ζωδίου της ακμής και
     — του κυβερνήτη του ζωδίου (σε ποιον οίκο βρίσκεται και τι σημαίνει αυτό).
@@ -541,65 +552,83 @@ def main():
 
     # ============ SECTION 2: PLANETS IN HOUSES ============
     st.header("2. Ενότητα 2 – Πλανήτες σε οίκους")
-    st.markdown("Για κάθε οίκο, διάλεξε ποιοι πλανήτες βρίσκονται μέσα.")
+    st.markdown("Συμπλήρωσε για κάθε πλανήτη: **Ζώδιο**, **Μοίρες** (π.χ. 21°55'07\"), **Οίκος** και αν είναι **Ανάδρομος (Rx)**.")
 
-    planet_names_gr = [gr for gr, en in PLANETS if gr not in ('AC', 'MC')]
-    house_planets_map = {}
-    cols_h2 = st.columns(4)
-
-    for i in range(1, 13):
-        col = cols_h2[(i - 1) % 4]
-        with col:
-            already_selected = []
-            for prev_house in range(1, i):
-                if prev_house in house_planets_map:
-                    already_selected.extend(house_planets_map[prev_house])
-
-            available_planets = [p for p in planet_names_gr if p not in already_selected]
-            selected_planets_gr = st.multiselect(
-                f"Πλανήτες στον Οίκο {i}",
-                available_planets,
-                key=f"house_planets_{i}_{st.session_state.reset_counter}",
-            )
-        house_planets_map[i] = selected_planets_gr
+    # Header row
+    col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([2, 2, 2, 1.5, 1])
+    with col_h1:
+        st.markdown("**Πλανήτης**")
+    with col_h2:
+        st.markdown("**Ζώδιο**")
+    with col_h3:
+        st.markdown("**Μοίρες**")
+    with col_h4:
+        st.markdown("**Οίκος**")
+    with col_h5:
+        st.markdown("**Rx**")
 
     planet_house_map = {}
-    for house_num, planets_gr_list in house_planets_map.items():
-        for gr_name in planets_gr_list:
-            en_name = next(en for (gr, en) in PLANETS if gr == gr_name)
-            planet_house_map[en_name] = house_num
-
-    st.markdown("#### Ζώδιο κάθε πλανήτη μέσα στον οίκο του")
-    st.markdown("Για κάθε πλανήτη, διάλεξε το ζώδιο του (προηγούμενο/ίδιο/επόμενο από την ακμή).")
-
     planet_sign_map = {}
-    for gr_name, en_name in [(gr, en) for (gr, en) in PLANETS if en in planet_house_map]:
-        house_num = planet_house_map[en_name]
-        cusp_sign_gr = houses_signs_gr.get(house_num, "---")
-        label = f"Ζώδιο για {gr_name} στον Οίκο {house_num}"
+    planet_degrees_map = {}
+    planet_retrograde_map = {}
 
-        if cusp_sign_gr in SIGNS_GR_LIST:
-            prev_sign, mid_sign, next_sign = get_neighboring_signs(cusp_sign_gr)
-            options = [prev_sign, mid_sign, next_sign]
-            default_index = 1
-        else:
-            options = SIGNS_WITH_EMPTY
-            default_index = 0
+    for gr_name, en_name in PLANETS:
+        col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 1.5, 1])
+        
+        with col1:
+            st.markdown(f"**{gr_name}**")
+        
+        with col2:
+            sign_gr = st.selectbox(
+                f"Ζώδιο {gr_name}",
+                options=SIGNS_WITH_EMPTY,
+                key=f"planet_{en_name}_sign_{st.session_state.reset_counter}",
+                label_visibility="collapsed"
+            )
+        
+        with col3:
+            degrees = st.text_input(
+                f"Μοίρες {gr_name}",
+                value="",
+                placeholder="21°55'07\"",
+                key=f"planet_{en_name}_degrees_{st.session_state.reset_counter}",
+                label_visibility="collapsed"
+            )
+        
+        with col4:
+            house_num = st.selectbox(
+                f"Οίκος {gr_name}",
+                options=["---"] + list(range(1, 13)),
+                key=f"planet_{en_name}_house_{st.session_state.reset_counter}",
+                label_visibility="collapsed"
+            )
+        
+        with col5:
+            if en_name not in ("AC", "MC"):
+                is_rx = st.checkbox(
+                    f"Rx {gr_name}",
+                    key=f"planet_{en_name}_rx_{st.session_state.reset_counter}",
+                    label_visibility="collapsed"
+                )
+            else:
+                is_rx = False
+                st.write("")  # Empty space for alignment
 
-        selected_sign_gr = st.selectbox(
-            label,
-            options,
-            index=default_index,
-            key=f"planet_sign_{en_name}_house_{house_num}_{st.session_state.reset_counter}",
-        )
-
-        if selected_sign_gr in SIGNS_GR_TO_EN:
+        # Store data
+        if sign_gr != "---":
             planet_sign_map[en_name] = {
-                "sign_gr": selected_sign_gr,
-                "sign": SIGNS_GR_TO_EN[selected_sign_gr],
+                "sign_gr": sign_gr,
+                "sign": SIGNS_GR_TO_EN[sign_gr]
             }
-        else:
-            planet_sign_map[en_name] = {"sign_gr": None, "sign": None}
+        
+        if degrees.strip():
+            planet_degrees_map[en_name] = degrees.strip()
+        
+        if house_num != "---":
+            planet_house_map[en_name] = house_num
+        
+        if en_name not in ("AC", "MC"):
+            planet_retrograde_map[en_name] = is_rx
 
     # ============ SECTION 3: ASPECTS ============
     st.header("3. Ενότητα 3 – Όψεις ανάμεσα σε πλανήτες")
@@ -679,6 +708,8 @@ def main():
         for en_name, house_num in planet_house_map.items():
             gr_name = next(gr for gr, en in PLANETS if en == en_name)
             sign_info = planet_sign_map.get(en_name, {})
+            degrees = planet_degrees_map.get(en_name, "")
+            retrograde = planet_retrograde_map.get(en_name, False)
             planets_in_houses.append(
                 {
                     "planet": en_name,
@@ -686,6 +717,8 @@ def main():
                     "house": house_num,
                     "sign_gr": sign_info.get("sign_gr"),
                     "sign": sign_info.get("sign"),
+                    "degrees": degrees,
+                    "retrograde": retrograde,
                 }
             )
 
