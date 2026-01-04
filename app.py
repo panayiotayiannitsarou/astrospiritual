@@ -537,7 +537,7 @@ def main():
     if "houses_report" not in st.session_state:
         st.session_state.houses_report = None
 
-    # ============ SECTION -1: NAME & GENDER ============
+    # ============ SECTION: NAME & GENDER ============
     st.header("📝 Στοιχεία Ατόμου")
     col_name, col_gender = st.columns([2, 1])
     with col_name:
@@ -554,41 +554,21 @@ def main():
             horizontal=True
         )
 
-    # ============ SECTION 0: BASIC INFO ============
-    st.header("0. Βασικά στοιχεία χάρτη")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        sun_sign_gr = st.selectbox("Ζώδιο Ηλίου", SIGNS_WITH_EMPTY, index=0,
-            key=f"sun_sign_{st.session_state.reset_counter}")
-    with col2:
-        asc_sign_gr = st.selectbox("Ωροσκόπος", SIGNS_WITH_EMPTY, index=0,
-            key=f"asc_sign_{st.session_state.reset_counter}")
-    with col3:
-        moon_sign_gr = st.selectbox("Ζώδιο Σελήνης", SIGNS_WITH_EMPTY, index=0,
-            key=f"moon_sign_{st.session_state.reset_counter}")
-
-    # ============ SECTION 1: HOUSES ============
-    st.header("1. Ενότητα 1 – Ακμές οίκων")
+    # ============ SECTION: HOUSES ============
+    st.header("Ακμές οίκων")
     st.markdown("Διάβασε από τον χάρτη σου σε ποιο ζώδιο ξεκινά κάθε οίκος (1–12).")
 
     houses_signs_gr = {}
-    house1_key = f"house_1_{st.session_state.reset_counter}"
-    st.session_state[house1_key] = asc_sign_gr if asc_sign_gr in SIGNS_WITH_EMPTY else SIGNS_WITH_EMPTY[0]
-
     cols = st.columns(4)
     for i in range(1, 13):
         col = cols[(i - 1) % 4]
         with col:
-            if i == 1:
-                sign = st.selectbox("Οίκος 1 (ίδιος με Ωροσκόπο)", SIGNS_WITH_EMPTY,
-                    key=house1_key, disabled=True)
-            else:
-                sign = st.selectbox(f"Οίκος {i}", SIGNS_WITH_EMPTY,
-                    key=f"house_{i}_{st.session_state.reset_counter}")
+            sign = st.selectbox(f"Οίκος {i}", SIGNS_WITH_EMPTY,
+                key=f"house_{i}_{st.session_state.reset_counter}")
         houses_signs_gr[i] = sign
 
-    # ============ SECTION 2: PLANETS IN HOUSES ============
-    st.header("2. Ενότητα 2 – Πλανήτες σε οίκους")
+    # ============ SECTION: PLANETS IN HOUSES ============
+    st.header("Πλανήτες σε οίκους")
     st.markdown("Συμπλήρωσε για κάθε πλανήτη: **Ζώδιο**, **Μοίρες** (π.χ. 21°55'07\"), **Οίκος** και αν είναι **Ανάδρομος (Rx)**.")
 
     # Header row
@@ -675,8 +655,8 @@ def main():
         if en_name not in ("AC", "MC"):
             planet_retrograde_map[en_name] = is_rx
 
-    # ============ SECTION 3: ASPECTS ============
-    st.header("3. Ενότητα 3 – Όψεις ανάμεσα σε πλανήτες")
+    # ============ SECTION: ASPECTS ============
+    st.header("Όψεις ανάμεσα σε πλανήτες")
     st.markdown("💡 **Tip:** Κάντε κλικ στο βέλος για να ανοίξετε κάθε ομάδα όψεων.")
 
     aspect_labels = [opt[0] for opt in ASPECT_OPTIONS]
@@ -721,19 +701,32 @@ def main():
 
     # ============ BASIC REPORT PROCESSING ============
     if generate_basic:
+        # Extract Sun, AC, Moon info from planet data
+        sun_sign_info = planet_sign_map.get("Sun", {})
+        sun_sign_gr = sun_sign_info.get("sign_gr", "---")
+        sun_sign = sun_sign_info.get("sign", "---")
+        
+        ac_sign_info = planet_sign_map.get("AC", {})
+        asc_sign_gr = ac_sign_info.get("sign_gr", "---")
+        asc_sign = ac_sign_info.get("sign", "---")
+        
+        moon_sign_info = planet_sign_map.get("Moon", {})
+        moon_sign_gr = moon_sign_info.get("sign_gr", "---")
+        moon_sign = moon_sign_info.get("sign", "---")
+        
         if sun_sign_gr == "---" or asc_sign_gr == "---" or moon_sign_gr == "---":
-            st.error("⚠️ Παρακαλώ συμπλήρωσε Ζώδιο Ηλίου, Ωροσκόπο και Ζώδιο Σελήνης!")
+            st.error("⚠️ Παρακαλώ συμπλήρωσε Ζώδιο και Οίκο για Ήλιο, AC και Σελήνη στην Ενότητα 2!")
             return
 
         basic_info = {
             "full_name": full_name.strip(),
             "gender": gender,
             "sun_sign_gr": sun_sign_gr, 
-            "sun_sign": SIGNS_GR_TO_EN[sun_sign_gr],
+            "sun_sign": sun_sign,
             "asc_sign_gr": asc_sign_gr, 
-            "asc_sign": SIGNS_GR_TO_EN[asc_sign_gr],
+            "asc_sign": asc_sign,
             "moon_sign_gr": moon_sign_gr, 
-            "moon_sign": SIGNS_GR_TO_EN[moon_sign_gr],
+            "moon_sign": moon_sign,
         }
 
         houses = []
