@@ -628,12 +628,17 @@ def main():
                 f"Μοίρες {gr_name}",
                 value="",
                 placeholder="π.χ. 21 55 7",
-                help="Γράψε μόνο αριθμούς (π.χ. 21 55 7 ή 21.55.7)",
                 key=f"planet_{en_name}_degrees_{st.session_state.reset_counter}",
                 label_visibility="collapsed"
             )
             # Auto-format the degrees
-            degrees = format_degrees(degrees_raw) if degrees_raw else ""
+            if degrees_raw and degrees_raw.strip():
+                degrees = format_degrees(degrees_raw)
+                # Show formatted version if different from input
+                if degrees != degrees_raw and degrees:
+                    st.caption(f"→ {degrees}")
+            else:
+                degrees = ""
         
         with col4:
             house_num = st.selectbox(
